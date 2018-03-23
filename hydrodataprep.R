@@ -4,15 +4,22 @@
 #Subtask B-1 and B-2
 
 #Authors: Mathis L. Messager and Dr. Julian D. Olden
+#Contact info: messamat@uw.edu
 #Date created: 03/15/2018
 #Date last updated: 03/22/2018
+
+#Purpose: import and merge hydrological data for the Rufiji basin of Tanzania — provided by CDMSmith Zachary T. Aichenwald and Japhet Kashaigili
 
 library(plyr)
 library(dplyr)
 library(ggplot2)
-library(xlsx)
+library(openxlsx)
+library(reshape2)
 setwd("F:/Tanzania/Tanzania/results")
 
+########################################
+#Import and merge hydrological data
+########################################
 #Import and merge ruaha data from Zach 
 ruahaflow <- read.csv("F:/Tanzania/Tanzania/data/sharepoint20180316/flow/2018-03-06 Corrected Ruaha Stage and Flow_data.csv")
 length(table(ruahaflow$Gage.ID))
@@ -35,35 +42,37 @@ str(kilomstations)
 kilomdat <- merge(kilomflow, kilomstations, by.x='Gage.ID', by.y='Station_ID')
 rufidat <- rbind(ruahadat, kilomdat)
 
-#Import data from Japhet
+#Import daily data from Japhet
+Japhet_GRuaha <- read.xlsx("F:/Tanzania/Tanzania/data/JaphetK_20180316/Rufiji_L.RukwaBasins_Flow Data_formatMM20180322.xlsx",sheet=1,startRow=4, detectDates=T)
+Japhet_1KA59 <- Japhet_GRuaha[,c(1,2)]
+Japhet_1KA59[,'Station'] <- '1KA59'
+Japhet_1KA11 <- Japhet_GRuaha[,c(3,4)]
+Japhet_1KA11[,'Station'] <- '1KA11'
+Japhet_GRuaha <- rbind(Japhet_1KA59, Japhet_1KA11)
+Japhet_GRuaha <- Japhet_GRuaha[!is.na(Japhet_GRuaha$Date) & Japhet_GRuaha$`Flow.(m3/s)`!='m' & Japhet_GRuaha$`Flow.(m3/s)`!='-',]
+Japhet_GRuaha$`Flow.(m3/s)` <- as.numeric(Japhet_GRuaha$`Flow.(m3/s)`)
+str(Japhet_GRuaha)
 
+Japhet_Kilom <- read.xlsx("F:/Tanzania/Tanzania/data/JaphetK_20180316/Rufiji_L.RukwaBasins_Flow Data_formatMM20180322.xlsx",sheet=2,startRow=3, detectDates=T)
+Japhet_Kilom <- Japhet_Kilom[-1,]
+colnames(Japhet_Kilom)[c(1,6)] <- c('Date','Udagaji')
+Japhet_Kilom <- melt(Japhet_Kilom, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
+str(Japhet_Kilom)
+Japhet_Kilom$`Flow.(m3/s)` <- as.numeric(Japhet_Kilom$`Flow.(m3/s)`)
+Japhet_Kilom$Date <- as.Date(Japhet_Kilom$Date)
+Japhet_Kilom <- Japhet_Kilom[!is.na(Japhet_Kilom$`Flow.(m3/s)`),]
 
+Japhet_LRuaha <- read.xlsx("F:/Tanzania/Tanzania/data/JaphetK_20180316/Rufiji_L.RukwaBasins_Flow Data_formatMM20180322.xlsx",sheet=3,startRow=3, detectDates=T)
+Japhet_LRuaha <- Japhet_LRuaha[-1,]
+colnames(Japhet_LRuaha)[1] <- 'Date'
+Japhet_LRuaha <- melt(Japhet_LRuaha, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
+Japhet_LRuaha$`Flow.(m3/s)` <- as.numeric(Japhet_LRuaha$`Flow.(m3/s)`)
+Japhet_LRuaha$Date <- as.Date(Japhet_LRuaha$Date)
+str(Japhet_LRuaha)
+Japhet_LRuaha <- Japhet_LRuaha[!is.na(Japhet_LRuaha$`Flow.(m3/s)`),]
 
+Japhet_dailydat <- rbind(Japhet_GRuaha, Japhet_Kilom, Japhet_LRuaha)
 
-ruaha$dateformat <- as.POSIXct(ruaha$Date.Time, format= "%m/%d/%Y %H:%M")
-ruaha$date <- as.POSIXct(ruaha$Date.Time, format= "%m/%d/%Y")
-
-summary<-ddply(ruaha, .(Gage.ID), summarize, mind=min(date), max=max(date), 
-               inter=as.numeric((max(date)-min(date)))/365.25, rec=length(unique(date)),
-               recper=length(unique(date))/as.numeric(max(date)-min(date)))
-summary(summary)
-
-ggplot(ruaha, aes(x=date, y=Calculated.Flow..cms., color=Gage.ID)) + geom_line() +
-  scale_y_log10()
-
-
-hydromerge <- merge(rufihydro, ruaha, by.x="Station_ID", by.y="GageID", all.y=F, all.x=T)
-hydromerge <- hydromerge[!duplicated(hydromerge$Station_ID),]
-str(hydromerge)
-table(hydromerge$RATING) 
-nrow(hydromerge[hydromerge$Q.MEASURE.COUNT >= 9,])
-
-
-#Screening using hydroTSM (management, analysis, interpolation and plotting of flow time series)
-#Assessment of daily streamflow time series quality with FlowScreen and/or EGRET packages
-#Hydrologic metrics with hydrostats
-
-#Prediction using caret
 
 
 
