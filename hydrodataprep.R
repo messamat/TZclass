@@ -94,7 +94,7 @@ if (dir.exists(outdir)) {
   print(paste('Create new directory:',outdir))
   dir.create(outdir)
 }
-write.csv(rufidat, file.path(outdir,'ZTE_rufidat.csv'))
-write.csv(Japhet_dailydat, file.path(outdir,'JK_dailydat.csv'))
-write.csv(Japhet_Unimpaired, file.path(outdir,'JK_monthly_unimpaired.csv'))
-write.csv(Japhet_Rukwa, file.path(outdir,'JK_monthly_rukwa.csv'))
+write.csv(rufidat, file.path(outdir,'ZTE_rufidat.csv'),row.names = F)
+write.csv(Japhet_dailydat, file.path(outdir,'JK_dailydat.csv'),row.names = F)
+write.csv(Japhet_Unimpaired, file.path(outdir,'JK_monthly_unimpaired.csv'),row.names = F)
+write.csv(Japhet_Rukwa, file.path(outdir,'JK_monthly_rukwa.csv'),row.names = F)
