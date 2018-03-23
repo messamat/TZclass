@@ -24,7 +24,7 @@ ruahaflow <- ruahaflow[,!names(ruahaflow) %in% c("X","X.1")]
 #str(ruahaflow)
 ruahastations <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-06 Corrected Ruaha Stage and Flow_stations.csv"))
 #str(ruahastations)
-ruahadat <- merge(ruahaflow, ruahastations[,c('Index','Station_ID','Station_Name','Rating.Curve.Source','Record.Quality','Rating.Curve.Quality')], 
+ruahadat <- merge(ruahaflow, ruahastations[,c('Station_ID','Rating.Curve.Source','Record.Quality','Rating.Curve.Quality')], 
                   by.x='Gage.ID', by.y='Station_ID')
 str(ruahadat)
 
@@ -36,7 +36,7 @@ colnames(kilomflow) <- colnames(ruahaflow)
 length(table(kilomflow$Gage.ID))
 kilomstations <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-13 Corrected Kilombero Stage and Flow_stations.csv"))
 str(kilomstations)
-kilomdat <- merge(kilomflow, kilomstations, by.x='Gage.ID', by.y='Station_ID')
+kilomdat <- merge(kilomflow, kilomstations[,c('Station_ID','Rating.Curve.Source','Record.Quality','Rating.Curve.Quality')], by.x='Gage.ID', by.y='Station_ID')
 rufidat <- rbind(ruahadat, kilomdat)
 
 #Import daily data from Japhet K.
@@ -83,6 +83,7 @@ Japhet_Rukwa <- read.xlsx(file.path(datadir,"JaphetK_20180316/Rufiji_L.RukwaBasi
 Japhet_Rukwa <- Japhet_Rukwa[-1,c(-3,-5)]
 colnames(Japhet_Rukwa) <- c('Date','3CD2','3B2','3A17')
 Japhet_Rukwa <- melt(Japhet_Rukwa, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
+Japhet_Rukwa$`Flow.(m3/s)` <- as.numeric(Japhet_Rukwa$`Flow.(m3/s)`)
 
 ########################################
 #Export data to directory
