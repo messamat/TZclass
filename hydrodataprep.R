@@ -18,7 +18,9 @@ datadir = "F:/Tanzania/Tanzania/data" #UPDATE
 #Import and merge hydrological data
 ########################################
 #Import and merge ruaha data from Zach 
-ruahaflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-06 Corrected Ruaha Stage and Flow_data.csv"))
+setClass('myDate')
+setAs("character","myDate", function(from)  as.POSIXct(from, format= "%m/%d/%Y %H:%M"))
+ruahaflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-06 Corrected Ruaha Stage and Flow_data.csv"),colClasses = c('factor','factor','myDate','numeric','numeric','character','character'))
 length(table(ruahaflow$Gage.ID))
 ruahaflow <- ruahaflow[,!names(ruahaflow) %in% c("X","X.1")]
 #str(ruahaflow)
@@ -29,7 +31,7 @@ ruahadat <- merge(ruahaflow, ruahastations[,c('Station_ID','Rating.Curve.Source'
 str(ruahadat)
 
 #Import and merge Kilombero data
-kilomflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-13 Corrected Kilombero Stage and Flow_data.csv"))
+kilomflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-13 Corrected Kilombero Stage and Flow_data.csv"),colClasses = c('factor','factor','myDate','numeric','numeric','character','character','character','character','character'))
 kilomflow <- kilomflow[,!names(kilomflow) %in% c("X","X.1","X.2","X.3","X.4")]
 str(kilomflow)
 colnames(kilomflow) <- colnames(ruahaflow)
