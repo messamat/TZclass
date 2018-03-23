@@ -27,10 +27,9 @@ JK_Rukwa <- read.csv(file.path(datadir,'JK_monthly_rukwa.csv'),colClasses = c('D
 unique(JK_dailydat$Station)[(which(unique(JK_dailydat$Station) %in% unique(rufidat$Gage.ID)))]
 rufidatsub <- data.table(rufidat[rufidat$Gage.ID %in% unique(JK_dailydat$Station),])
 JK_dailydatsub <- JK_dailydat[JK_dailydat$Station %in% unique(rufidatsub$Gage.ID),]
-rufidatsub <- rufidatsub[,list(Calculated.flow..cms.daily=mean(Calculated.Flow..cms.)), .(Gage.ID, Date.Time)] #Get daily average discharge from ZTE data for comparison with JK
+rufidatsub <- rufidatsub[,list(Station.Name, Calculated.flow..cms.daily=mean(Calculated.Flow..cms.)), .(Gage.ID, Date.Time)] #Get daily average discharge from ZTE data for comparison with JK
 JK_ZTE_dat <- merge(rufidatsub,JK_dailydatsub, by.x=c('Gage.ID','Date.Time'), by.y=c('Station','Date'), all.x=T, all.y=T)
-colnames(JK_ZTE_dat) <- c("Gage.ID", "Date","Flow_ZTE", "Flow_JK")
-
+colnames(JK_ZTE_dat) <- c("Gage.ID", "Date","Station.Name", "Flow_ZTE", "Flow_JK")
 
 #Compare data graphically
 comparison1 <- ggplot(JK_ZTE_dat, aes(x=Flow_ZTE, y=Flow_JK, color=Gage.ID)) + 
@@ -53,6 +52,7 @@ comparison2
 pdf('ZTE_JK_datacomparison2.pdf',width = 11.5, height=8.5)
 comparison2
 dev.off()
+
 
 
 
