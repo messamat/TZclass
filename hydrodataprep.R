@@ -8,11 +8,8 @@
 #Date created: 03/15/2018
 #Date last updated: 03/22/2018
 
-#Purpose: import and merge hydrological data for the Rufiji basin of Tanzania — provided by CDMSmith Zachary T. Aichenwald and Japhet Kashaigili
+#Purpose: import and merge hydrological data for the Rufiji basin of Tanzania — provided by CDMSmith Zachary T. Eichenwald (ZTE) and Japhet Kashaigili (JK)
 
-library(plyr)
-library(dplyr)
-library(ggplot2)
 library(openxlsx)
 library(reshape2)
 setwd("F:/Tanzania/Tanzania/results")
@@ -87,6 +84,17 @@ Japhet_Rukwa <- Japhet_Rukwa[-1,c(-3,-5)]
 colnames(Japhet_Rukwa) <- c('Date','3CD2','3B2','3A17')
 Japhet_Rukwa <- melt(Japhet_Rukwa, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
 
-
-
-
+########################################
+#Export data to directory
+########################################
+outdir=file.path(getwd(),paste('rufiji_hydrodataraw',as.character(format(Sys.Date(),'%Y%m%d')),sep='_'))
+if (dir.exists(outdir)) {
+  print('Directory already exists')
+} else {
+  print(paste('Create new directory:',outdir))
+  dir.create(outdir)
+}
+write.csv(rufidat, file.path(outdir,'ZTE_rufidat.csv'))
+write.csv(Japhet_dailydat, file.path(outdir,'JK_dailydat.csv'))
+write.csv(Japhet_Unimpaired, file.path(outdir,'JK_monthly_unimpaired.csv'))
+write.csv(Japhet_Rukwa, file.path(outdir,'JK_monthly_rukwa.csv'))
