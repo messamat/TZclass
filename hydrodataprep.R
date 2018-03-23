@@ -42,7 +42,7 @@ str(kilomstations)
 kilomdat <- merge(kilomflow, kilomstations, by.x='Gage.ID', by.y='Station_ID')
 rufidat <- rbind(ruahadat, kilomdat)
 
-#Import daily data from Japhet
+#Import daily data from Japhet K.
 Japhet_GRuaha <- read.xlsx("F:/Tanzania/Tanzania/data/JaphetK_20180316/Rufiji_L.RukwaBasins_Flow Data_formatMM20180322.xlsx",sheet=1,startRow=4, detectDates=T)
 Japhet_1KA59 <- Japhet_GRuaha[,c(1,2)]
 Japhet_1KA59[,'Station'] <- '1KA59'
@@ -73,6 +73,19 @@ Japhet_LRuaha <- Japhet_LRuaha[!is.na(Japhet_LRuaha$`Flow.(m3/s)`),]
 
 Japhet_dailydat <- rbind(Japhet_GRuaha, Japhet_Kilom, Japhet_LRuaha)
 
+#Import monthly unimpaired data from Japhet K.
+Japhet_Unimpaired <- read.xlsx("F:/Tanzania/Tanzania/data/JaphetK_20180316/Rufiji_L.RukwaBasins_Flow Data_formatMM20180322.xlsx",sheet=4,startRow=2, detectDates=T)
+Japhet_Unimpaired <- Japhet_Unimpaired[-1,]
+Japhet_Unimpaired <- melt(Japhet_Unimpaired, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
+str(Japhet_Unimpaired)
+Japhet_Unimpaired$`Flow.(m3/s)` <- as.numeric(Japhet_Unimpaired$`Flow.(m3/s)`)
+Japhet_Unimpaired <- Japhet_Unimpaired[!is.na(Japhet_Unimpaired$`Flow.(m3/s)`),] #No NA, must be modeled?
+
+#Import monthly Rukwa data from Japhet K.
+Japhet_Rukwa <- read.xlsx("F:/Tanzania/Tanzania/data/JaphetK_20180316/Rufiji_L.RukwaBasins_Flow Data_formatMM20180322.xlsx",sheet=5,startRow=2, detectDates=T)
+Japhet_Rukwa <- Japhet_Rukwa[-1,c(-3,-5)]
+colnames(Japhet_Rukwa) <- c('Date','3CD2','3B2','3A17')
+Japhet_Rukwa <- melt(Japhet_Rukwa, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
 
 
 
