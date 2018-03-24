@@ -6,7 +6,7 @@
 #Authors: Mathis L. Messager and Dr. Julian D. Olden
 #Contact info: messamat@uw.edu
 #Date created: 03/15/2018
-#Date last updated: 03/22/2018
+#Date last updated: 03/23/2018
 
 #Purpose: import and merge hydrological data for the Rufiji basin of Tanzania — provided by CDMSmith Zachary T. Eichenwald (ZTE) and Japhet Kashaigili (JK)
 
@@ -64,6 +64,7 @@ Japhet_Kilom <- Japhet_Kilom[!is.na(Japhet_Kilom$`Flow.(m3/s)`),]
 Japhet_LRuaha <- read.xlsx(file.path(datadir,"JaphetK_20180316/Rufiji_L.RukwaBasins_Flow Data_formatMM20180322.xlsx"),sheet=3,startRow=3, detectDates=T)
 Japhet_LRuaha <- Japhet_LRuaha[-1,]
 colnames(Japhet_LRuaha)[1] <- 'Date'
+colnames(Japhet_LRuaha)[4] <- '1KA31'
 Japhet_LRuaha <- melt(Japhet_LRuaha, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
 Japhet_LRuaha$`Flow.(m3/s)` <- as.numeric(Japhet_LRuaha$`Flow.(m3/s)`)
 Japhet_LRuaha$Date <- as.Date(Japhet_LRuaha$Date)
