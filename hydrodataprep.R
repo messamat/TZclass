@@ -30,8 +30,10 @@ ruahadat <- merge(ruahaflow, ruahastations[,c('Station_ID','Rating.Curve.Source'
                   by.x='Gage.ID', by.y='Station_ID')
 str(ruahadat)
 
-#Import and merge Kilombero data
+#Import and merge Kilombero data (some data are in "%m/%d/%Y %H:%M" and others are in "%m/%d/%Y")
 kilomflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-13 Corrected Kilombero Stage and Flow_data.csv"),colClasses = c('factor','factor','myDate','numeric','numeric','character','character','character','character','character'))
+kilomflow2 <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-13 Corrected Kilombero Stage and Flow_data.csv"),colClasses = c('factor','factor','character','numeric','numeric','character','character','character','character','character'))
+kilomflow[is.na(kilomflow$Date.Time),'Date.Time'] <- as.POSIXct(paste(kilomflow2[is.na(kilomflow$Date.Time),'Date.Time'], "12:00:00"), format= "%m/%d/%Y %H:%M:%S") 
 kilomflow <- kilomflow[,!names(kilomflow) %in% c("X","X.1","X.2","X.3","X.4")]
 str(kilomflow)
 colnames(kilomflow) <- colnames(ruahaflow)
