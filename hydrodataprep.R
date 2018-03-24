@@ -17,7 +17,7 @@ datadir = "F:/Tanzania/Tanzania/data" #UPDATE
 ########################################
 #Import and merge hydrological data
 ########################################
-#Import and merge ruaha data from Zach 
+###Import and merge ruaha data from Zach 
 setClass('myDate')
 setAs("character","myDate", function(from)  as.POSIXct(from, format= "%m/%d/%Y %H:%M"))
 ruahaflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-06 Corrected Ruaha Stage and Flow_data.csv"),colClasses = c('factor','factor','myDate','numeric','numeric','character','character'))
@@ -25,12 +25,14 @@ length(table(ruahaflow$Gage.ID))
 ruahaflow <- ruahaflow[,!names(ruahaflow) %in% c("X","X.1")]
 #str(ruahaflow)
 ruahastations <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-06 Corrected Ruaha Stage and Flow_stations.csv"))
+#Check whether comments on record and rating curve quality are unique for each gage
+nrow(ruahastations)
 #str(ruahastations)
 ruahadat <- merge(ruahaflow, ruahastations[,c('Station_ID','Rating.Curve.Source','Record.Quality','Rating.Curve.Quality')], 
                   by.x='Gage.ID', by.y='Station_ID')
 str(ruahadat)
 
-#Import and merge Kilombero data (some data are in "%m/%d/%Y %H:%M" and others are in "%m/%d/%Y")
+###Import and merge Kilombero data (some data are in "%m/%d/%Y %H:%M" and others are in "%m/%d/%Y")
 kilomflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-13 Corrected Kilombero Stage and Flow_data.csv"),colClasses = c('factor','factor','myDate','numeric','numeric','character','character','character','character','character'))
 kilomflow2 <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-13 Corrected Kilombero Stage and Flow_data.csv"),colClasses = c('factor','factor','character','numeric','numeric','character','character','character','character','character'))
 kilomflow[is.na(kilomflow$Date.Time),'Date.Time'] <- as.POSIXct(paste(kilomflow2[is.na(kilomflow$Date.Time),'Date.Time'], "12:00:00"), format= "%m/%d/%Y %H:%M:%S") 
@@ -39,11 +41,19 @@ str(kilomflow)
 colnames(kilomflow) <- colnames(ruahaflow)
 length(table(kilomflow$Gage.ID))
 kilomstations <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-13 Corrected Kilombero Stage and Flow_stations.csv"))
+#Check whether comments on record and rating curve quality are unique for each gage
+nrow(kilomstations)
+#Comments are not unique. Go back to original data: it seems like comments for first 1KB36 in stations
+#"1973 RC good. 2015-2017 RC poor, with little data." in fact correspond to comments on station 1KB27 Luipa/Ruipa river
+#Observed on OneNote file from ZTE. However, it does not appear that there are data for 1KB27 in the dataset? To inquire with ZTE.
+kilomstations <- kilomstations[!(kilomstations$Station_ID=='1KB36' & kilomstations$Record.Quality=='Poor, many data gaps'),]
 str(kilomstations)
 kilomdat <- merge(kilomflow, kilomstations[,c('Station_ID','Rating.Curve.Source','Record.Quality','Rating.Curve.Quality')], by.x='Gage.ID', by.y='Station_ID')
+
+###Merge great Ruaha data and Kilombero data
 rufidat <- rbind(ruahadat, kilomdat)
 
-#Import daily data from Japhet K.
+###Import daily data from Japhet K.
 Japhet_GRuaha <- read.xlsx(file.path(datadir,"JaphetK_20180316/Rufiji_L.RukwaBasins_Flow Data_formatMM20180322.xlsx"),sheet=1,startRow=4, detectDates=T)
 Japhet_1KA59 <- Japhet_GRuaha[,c(1,2)]
 Japhet_1KA59[,'Station'] <- '1KA59'
@@ -59,6 +69,7 @@ Japhet_Kilom <- Japhet_Kilom[-1,]
 colnames(Japhet_Kilom)[c(1,6)] <- c('Date','Udagaji')
 Japhet_Kilom <- melt(Japhet_Kilom, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
 str(Japhet_Kilom)
+colnames(Japhet_Kilom) <- colnames(Japhet_GRuaha)[c(1,3,2)]
 Japhet_Kilom$`Flow.(m3/s)` <- as.numeric(Japhet_Kilom$`Flow.(m3/s)`)
 Japhet_Kilom$Date <- as.Date(Japhet_Kilom$Date)
 Japhet_Kilom <- Japhet_Kilom[!is.na(Japhet_Kilom$`Flow.(m3/s)`),]
@@ -68,6 +79,7 @@ Japhet_LRuaha <- Japhet_LRuaha[-1,]
 colnames(Japhet_LRuaha)[1] <- 'Date'
 colnames(Japhet_LRuaha)[4] <- '1KA31'
 Japhet_LRuaha <- melt(Japhet_LRuaha, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
+colnames(Japhet_LRuaha) <- colnames(Japhet_GRuaha)[c(1,3,2)]
 Japhet_LRuaha$`Flow.(m3/s)` <- as.numeric(Japhet_LRuaha$`Flow.(m3/s)`)
 Japhet_LRuaha$Date <- as.Date(Japhet_LRuaha$Date)
 str(Japhet_LRuaha)
@@ -80,6 +92,7 @@ Japhet_Unimpaired <- read.xlsx(file.path(datadir,"JaphetK_20180316/Rufiji_L.Rukw
 Japhet_Unimpaired <- Japhet_Unimpaired[-1,]
 Japhet_Unimpaired <- melt(Japhet_Unimpaired, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
 str(Japhet_Unimpaired)
+colnames(Japhet_Unimpaired) <- colnames(Japhet_GRuaha)[c(1,3,2)]
 Japhet_Unimpaired$`Flow.(m3/s)` <- as.numeric(Japhet_Unimpaired$`Flow.(m3/s)`)
 Japhet_Unimpaired <- Japhet_Unimpaired[!is.na(Japhet_Unimpaired$`Flow.(m3/s)`),] #No NA, must be modeled?
 
@@ -88,7 +101,9 @@ Japhet_Rukwa <- read.xlsx(file.path(datadir,"JaphetK_20180316/Rufiji_L.RukwaBasi
 Japhet_Rukwa <- Japhet_Rukwa[-1,c(-3,-5)]
 colnames(Japhet_Rukwa) <- c('Date','3CD2','3B2','3A17')
 Japhet_Rukwa <- melt(Japhet_Rukwa, id.vars = 'Date',value.name='Flow.(m3/s)',variable.name='Station')
+colnames(Japhet_Rukwa) <- colnames(Japhet_GRuaha)[c(1,3,2)]
 Japhet_Rukwa$`Flow.(m3/s)` <- as.numeric(Japhet_Rukwa$`Flow.(m3/s)`)
+Japhet_Rukwa <- Japhet_Rukwa[!is.na(Japhet_Rukwa$`Flow.(m3/s)`),] #No NA, must be modeled?
 
 ########################################
 #Export data to directory
