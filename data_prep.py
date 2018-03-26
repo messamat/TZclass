@@ -931,13 +931,13 @@ for var in ['Dir','Geol','LC','Soil']:
                 if row[i] is not None:
                     row[i]=row[i]/denom #Compute percentage area for each category
             cursor.updateRow(row)
-    del row
-    del cursor
+    del cursor, row
 #For forest loss, compute percentage and get rid of WsFLosSum_0 field
 with arcpy.da.UpdateCursor(rufiws_tab, ['WsFLosSum_0','WsFLosSum_1']) as cursor:
     for row in cursor:
         row[1]=row[1]/sum(row)
         cursor.updateRow(row)
+    del cursor, row
 arcpy.DeleteField_management(rufiws_tab,'WsFLosSum_0')
 
 ########################################################################################################################
@@ -963,7 +963,7 @@ wdpa = datadir+'WDPA_Mar2018_Public\\WDPA_Mar2018_Public.gdb\\WDPA_poly_Mar2018'
 arcpy.Intersect_analysis([sline,wdpa],wd+'wdpalineinters.shp')
 arcpy.AddGeometryAttributes_management(wd+'wdpalineinters.shp', Geometry_Properties="LENGTH_GEODESIC", Length_Unit="KILOMETERS")
 arcpy.Statistics_analysis(wd+'wdpalineinters.shp', "PA", [["LENGTH_GEO", "SUM"]], case_field="GridID")
-arcpy.AlterField_management("PA","SUM_LENGTH_GEO","ReaPAPer")
+arcpy.AlterField_management("PA","SUM_LENGTH_GEO",new_field_name="ReaPAPer",new_field_alias='ReaPAPer')
 arcpy.Delete_management(wd+'wdpalineinters.shp')
 
 arcpy.MakeTableView_management("elv","elvview")
@@ -971,6 +971,13 @@ arcpy.AddJoin_management("elvview", 'Value', "dir", 'Value')
 arcpy.AddJoin_management("elvview", 'Value', "profilcurvat", 'Value')
 arcpy.AddJoin_management("elvview", 'Value', "PA", 'GridID')
 arcpy.CopyRows_management('elvview','reach_attri') #Crashes so do it in arcmap + remove redundant fields
+
+with arcpy.da.UpdateCursor('reach_attri', ['ReaPAPer']) as cursor:
+    for row in cursor:
+        if row[0] is None:
+            row[0]=0
+            cursor.updateRow(row)
+    del cursor, row
 
 arcpy.ClearEnvironment('workspace')
 ########################################################################################################################
@@ -1036,12 +1043,9 @@ arcpy.MakeFeatureLayer_management(slineruficat, 'slineruficatlyr')
 arcpy.AddJoin_management('slineruficatlyr', 'GridID', finalgdb+'rufiji_wsattri_all', 'GridID')
 slineruficatws = finalgdb +'streamnet118_rufiji_catws'
 arcpy.CopyFeatures_management('slineruficatlyr', slineruficatws)
-
-
-
-
-#RUN
 arcpy.DeleteField_management(slineruficatws, ['OBJECTID_1','GridID_1'])
+[f.name for f in arcpy.ListFields(slineruficatws)]
+
 
 #Compute mines, dams, road, PA, and drainage densities for catchment and watershed
 arcpy.AddField_management(slineruficatws, 'CatDen', field_type='DOUBLE')
@@ -1072,4 +1076,12 @@ arcpy.CopyFeatures_management('slineruficatws_lyr', slinerufifinal)
 
 #Compute reach slope
 arcpy.AddField_management(slinerufifinal, field_name='ReaSloAvg',field_type='FLOAT')
-arcpy.CalculateField_management(slinerufifinal, 'ReaSloAvg', "math.degrees(math.atan((!ReaElvMax!-!ReaElvMin!)/(1000*!CatLen_1!)))", expression_type='PYTHON3')
+arcpy.CalculateField_management(slinerufifinal, 'ReaSloAvg', "math.degrees(math.atan((!ReaElvMax!-!ReaElvMin!)/(1000*!CatLen_1!)))", expression_type='PYTHON')
+
+
+#Bugs to correct
+    #PA percentage seems off
+    #Dam density does not seem to include the two main dams in Rufiji in the end?
+#Remaining tasks
+    #Compute maximum statistics
+    #Compute floodplain statistics
