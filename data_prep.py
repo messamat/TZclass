@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 __author__ = 'Mathis Messager'
 #Creation date: 2018/03/08
 #Last updated: 2018/22/08
