@@ -758,7 +758,6 @@ arcpy.GetCount_management('spointlyr')
 
 catstatslist = [[f.name, 'SUM'] for f in arcpy.ListFields('spointlyr') if not f.name in ['CatLakInd', 'CatResInd','CatElvMax','CatElvMin','ReaOrd','FlowAcc']][12:-1] #Create list of all fields to sum
 sumfields = [f.name for f in arcpy.ListFields('spointlyr') if not f.name in ['CatLakInd', 'CatResInd','CatElvMax','CatElvMin','ReaOrd','FlowAcc']][12:-1]
-maxfields = ['CatLakInd', 'CatResInd','CatElvMax'] #Create list of all fields to find max
 arcpy.env.workspace=wd+'watershed_attri.gdb'
 
 ########################################################################################################################
@@ -849,11 +848,12 @@ print(end - start)
 #Create template table #Do not reiterate if re-running code and no copy has been made of data
 out_tab = gdbname_ws+ 'RufiWs_Attri_Max'
 scratch_tab = gdbname_ws+ 'scratch'
+maxfields = ['CatLakInd', 'CatResInd','CatElvMax'] #Create list of all fields to find max
 tabfields = maxfields + ['GridID']
 arcpy.MakeFeatureLayer_management(outhydro+'linemidpoints_attrirufi', 'spointlyrreduce',where_clause="ReaOrd>3") #Create another temporary layer as numpy array cannot hold the entire table (MemoryError: cannot allocate array memory)
 array_max =arcpy.da.FeatureClassToNumPyArray('spointlyrreduce', tabfields)
-arcpy.da.NumPyArrayToTable(array_max, scratch_tab)
-arcpy.CreateTable_management(wd+'watershed_attri.gdb', 'RufiWs_Attri_Max', scratch_tab)
+#arcpy.da.NumPyArrayToTable(array_max, scratch_tab)
+#arcpy.CreateTable_management(wd+'watershed_attri.gdb', 'RufiWs_Attri_Max', scratch_tab)
 arcpy.Delete_management(scratch_tab)
 arcpy.Delete_management('spointlyrreduce')
 
@@ -868,30 +868,30 @@ with arcpy.da.SearchCursor('spointlyr', ["GridID"]) as cursor:
     for row in cursor:
             print(x)
             x=x+1
-            #if x >= 40777:
-            #print(row[0])
-            subcatch_id = row[0]
-            expr = '"GridID" = %s' %subcatch_id
-            arcpy.SelectLayerByAttribute_management('spointlyr', 'NEW_SELECTION', expr)
-            arcpy.TraceGeometricNetwork_management(in_geometric_network= networkrufi, out_network_layer = "up_trace_lyr", in_flags = "spointlyr",
-                                                   in_trace_task_type= "TRACE_UPSTREAM")
-            up_tr = "up_trace_lyr\\rufilines"
-            #print('Trace done!')
-            array=arcpy.da.FeatureClassToNumPyArray(up_tr, maxfields)
-            #print('Feature class to numpy array done!')
-            if len(by_col)==0:
-                by_col = numpy.array([tuple([array[i].max() for i in nms if array[i].dtype.kind in ('i', 'f')]+[row[0]])],
-                                      dtype=array_types)
-            elif len(by_col)>0 and len(by_col)<500:
-                by_col = numpy.concatenate((by_col,numpy.array([tuple([array[i].max() for i in nms if array[i].dtype.kind in ('i', 'f')]+[row[0]])],dtype=array_types)),axis=0)
-            elif len(by_col)==500:
-                by_col = numpy.concatenate((by_col,numpy.array([tuple([array[i].max() for i in nms if array[i].dtype.kind in ('i', 'f')]+[row[0]])],dtype=array_types)),axis=0)
-                scratch=arcpy.da.NumPyArrayToTable(by_col, scratch_tab)
-                #print('Numpy array to table done!')
-                arcpy.Append_management(scratch_tab, out_tab, "TEST")
-                #print('Append done!')
-                arcpy.Delete_management(scratch_tab)
-                by_col = numpy.empty([0, len(array_types)], dtype=array_types)
+            if x >= 20857:
+                #print(row[0])
+                subcatch_id = row[0]
+                expr = '"GridID" = %s' %subcatch_id
+                arcpy.SelectLayerByAttribute_management('spointlyr', 'NEW_SELECTION', expr)
+                arcpy.TraceGeometricNetwork_management(in_geometric_network= networkrufi, out_network_layer = "up_trace_lyr", in_flags = "spointlyr",
+                                                       in_trace_task_type= "TRACE_UPSTREAM")
+                up_tr = "up_trace_lyr\\rufilines"
+                #print('Trace done!')
+                array=arcpy.da.FeatureClassToNumPyArray(up_tr, maxfields)
+                #print('Feature class to numpy array done!')
+                if len(by_col)==0:
+                    by_col = numpy.array([tuple([array[i].max() for i in nms if array[i].dtype.kind in ('i', 'f')]+[row[0]])],
+                                          dtype=array_types)
+                elif len(by_col)>0 and len(by_col)<500:
+                    by_col = numpy.concatenate((by_col,numpy.array([tuple([array[i].max() for i in nms if array[i].dtype.kind in ('i', 'f')]+[row[0]])],dtype=array_types)),axis=0)
+                elif len(by_col)==500:
+                    by_col = numpy.concatenate((by_col,numpy.array([tuple([array[i].max() for i in nms if array[i].dtype.kind in ('i', 'f')]+[row[0]])],dtype=array_types)),axis=0)
+                    scratch=arcpy.da.NumPyArrayToTable(by_col, scratch_tab)
+                    #print('Numpy array to table done!')
+                    arcpy.Append_management(scratch_tab, out_tab, "TEST")
+                    #print('Append done!')
+                    arcpy.Delete_management(scratch_tab)
+                    by_col = numpy.empty([0, len(array_types)], dtype=array_types)
     scratch=arcpy.da.NumPyArrayToTable(by_col, scratch_tab)
     #print('Numpy array to table done!')
     arcpy.Append_management(scratch_tab, out_tab, "TEST")
