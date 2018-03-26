@@ -94,10 +94,3 @@ comparison1KB9_2 <- ggplot(gage1KB9, aes(x=Date, y=Flow_JK)) +
 comparison1KB9_2
 
 #It definitely seems like a unit difference + obviously different rating curves. But there also seems to be constant filled in data in ZTE data?
-
-
-
-
-
-
-
