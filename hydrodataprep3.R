@@ -20,8 +20,9 @@ datadir = file.path(getwd(),paste('rufiji_hydrodataraw','20180324',sep='_')) #UP
 origdatadir = "F:/Tanzania/Tanzania/data"
 
 setClass('myDate')
-setAs("character","myDate", function(from)  as.POSIXlt(from, format= "%Y-%m-%d %H:%M:%S"))
-rufidat <- read.csv(file.path(datadir,'ZTE_rufidat.csv'),colClasses = c('character','character','myDate','numeric','numeric','factor','factor','factor'))
+#setAs("character","myDate", function(from)  as.POSIXlt(from, format= "%Y-%m-%d %H:%M:%S"))
+#rufidat <- read.csv(file.path(datadir,'ZTE_rufidat.csv'),colClasses = c('character','character','myDate','numeric','numeric','factor','factor','factor'))
+rufidat <- read.csv(file.path(datadir,'ZTE_rufidat.csv'),colClasses = c('character','character','Date','numeric','numeric','factor','factor','factor'))
 str(rufidat)
 
 #General plotting of time series
@@ -35,10 +36,6 @@ rawplot
 #png('rufidat_rawts.png',width = 32, height=16,units='in',res=300)
 #rawplot
 #dev.off()
-
-#Remove KB33 (below Kihansi, as only contains -999)
-rufidat <- data.table(rufidat[rufidat$Gage.ID!='1KB33',])
-nrow(rufidat[rufidat$Calculated.Flow..cms.==-999,])
 
 ########################################################################################################
 #Format rufiji flow data to be used within the FlowScreen package following the USGS data import format
@@ -55,7 +52,7 @@ nrow(rufidat[rufidat$Calculated.Flow..cms.==-999,])
 #Reproduce data structure from read.flows function
 str(rufidat)
 rufidat_screenform <- data.table(rufidat[,c('Gage.ID','Date.Time','Calculated.Flow..cms.','Record.Quality','Rating.Curve.Source')])
-rufidat_screenform$Date.Time <- as.Date(rufidat_screenform$Date.Time)
+#rufidat_screenform$Date.Time <- as.Date(rufidat_screenform$Date.Time)
 rufidat_screenform <- rufidat_screenform[,list(Calculated.flow..cms.daily=mean(Calculated.Flow..cms., na.rm=T)), .(Gage.ID, Date.Time,Record.Quality,Rating.Curve.Source)]
 rufidat_screenform <- rufidat_screenform[,c('Gage.ID','Date.Time','Calculated.flow..cms.daily','Record.Quality','Rating.Curve.Source')]
 colnames(rufidat_screenform) <- colnames(test)
@@ -111,31 +108,29 @@ for (gage in unique(rufidat_screenform$ID)) {
   dev.off()
 }
 
-#########################################################
-# Clean out spurious data based on preliminary observation
-#########################################################
-rufidat_clean <- rufidat
+####################################################################################
+# Clean out obviously spurious data based on preliminary observation
+####################################################################################
+rufidat_clean <- rufidat_screenform
 ###1KA2A	LITTLE RUAHA AT NDIUKA: period 1995 to late 2011 seems suspect: remove
 #                                 Lots of missing data, appears like low-flow part of the year was cut-off or everything was shifted up?
+#g1KA2A<-rufidat_clean[rufidat_clean$ID=='1KA2A',]
+rufidat_deleted <- rufidat_clean[(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>'1994-12-19' & rufidat_clean$Date<'2001-09-05'),] 
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>'1994-12-19' & rufidat_clean$Date<'2001-09-05'),] 
+###1KA4A	GREAT RUAHA AT MSOSA: seems like stage measurements corresponding to a discharge right over 100cms are spurious as they plateau, 
+#                               but not picked up by derivative. Will be kept.
+###1KA9	KIMANI RIVER AT OLD GN: very large peak in 1988 seems spurious as 02/22:131,02/23:>20,000,02/24:350 cms
+#g1KA9<-rufidat_clean[rufidat_clean$ID=='1KA9',]
+rufidat_deleted <- rbind(rufidat_deleted,rufidat_clean[(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),]) 
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),] 
+###1KA15A	NDEMBERA AT ILONGO: data prior to 1970 are wonky. 
+#ZTE posits that ' Old data are the outliers on the curve - possibility of old station (pre 1970) at different location?.  
+g1KA9<-rufidat_clean[rufidat_clean$ID=='1KA9',]
+rufidat_deleted <- rbind(rufidat_deleted,rufidat_clean[(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),]) 
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),] 
 
 
-#1KA4A	GREAT RUAHA AT MSOSA: seems like stage measurements corresponding to a discharge right over 
 
-###1KB14A	LUMEMO AT KIBURUBUTU
-###1KB15A	MNGETA RIVER AT MCHOMBE
-###1KB16C	FURUA AT MALINYI
-###1KB17A	KILOMBERO RIVER AT SWERO
-###1KB18B	RUHUDJI BELOW KIFUNG'A FALLS
-###1KB19A	HAGAFIRO AT HAGAFIRO
-###1KB24	SANJE RIVER AT SANJE
-###1KB33	KIHANSI BELOW KIHANSI DAM
-###1KB36	MGUGWE RIVER AT MGUGWE
-###1KB36	MGUGWE RIVER AT MGUGWE
-###1KB4A	KILOMBERO RIVER AT IFWEMA
-###1KB8B	MPANGA RIVER AT MPANGA MISSION
-###1KB9	MNYERA RIVER AT TAWETA
-###1KA11A	MBARALI RIVER AT IGAWA
-###1KA15A	NDEMBERA AT ILONGO
 ###1KA21A	LITTLE RUAHA AT IHIMBU
 ###1KA22	MTITU AT MTITU
 ###1KA27	GREAT RUAHA AT MKUPULE
@@ -154,9 +149,25 @@ rufidat_clean <- rufidat
 ###1KA59	GREAT RUAHA AT MSEMBE FERRY
 ###1KA66	MLOWO AT ILONGO
 ###1KA71	GREAT RUAHA AT NYALUHANGA
-###1KA7A	CHIMALA AT CHITEKELO
-###1KA8A	GREAT RUAHA AT SALIMWANI
-###1KA9	KIMANI RIVER AT OLD GNR
+
+
+
+###1KB14A	LUMEMO AT KIBURUBUTU:
+###1KB15A	MNGETA RIVER AT MCHOMBE
+###1KB16C	FURUA AT MALINYI
+###1KB17A	KILOMBERO RIVER AT SWERO
+###1KB18B	RUHUDJI BELOW KIFUNG'A FALLS
+###1KB19A	HAGAFIRO AT HAGAFIRO
+###1KB24	SANJE RIVER AT SANJE
+###1KB33	KIHANSI BELOW KIHANSI DAM: only contains -999: remove
+rufidat <- rufidat[rufidat$Gage.ID!='1KB33',]
+
+###1KB36	MGUGWE RIVER AT MGUGWE
+###1KB36	MGUGWE RIVER AT MGUGWE
+###1KB4A	KILOMBERO RIVER AT IFWEMA
+###1KB8B	MPANGA RIVER AT MPANGA MISSION
+###1KB9	MNYERA RIVER AT TAWETA
+R
 
 
 
@@ -171,7 +182,8 @@ rufidat_clean <- rufidat
 rufidat$year <- format(rufidat$Date.Time, "%Y")
 rufidat$month <- as.numeric(format(rufidat$Date.Time, "%m"))
 
-
+#Test range of maximum gap length per year and total percentage missing data
+#
 
 
 
