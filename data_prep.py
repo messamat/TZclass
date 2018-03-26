@@ -24,7 +24,6 @@ import gc
 #import multiprocessing
 #from multiprocessing.dummy import Pool
 
-
 arcpy.env.overwriteOutput = True
 arcpy.env.qualifiedFieldNames = False
 if arcpy.CheckExtension("Spatial") == "Available":
@@ -226,12 +225,12 @@ arcpy.Resample_management(in_raster=wd+"srtmclean",out_raster=wd+'srtmclean90', 
     # - Aspect (Horn's Method) : "/results/aspect"
     # - Profile curvature : "/results/profilcurvat"
 
-#########################################################################################################################
+########################################################################################################################
 #Get catchment characteristics
 ########################################################################################################################
-gdbname = "subcatch_attri.gdb"
-#arcpy.CreateFileGDB_management(wd, gdbname)
-env.workspace = wd + gdbname
+gdbname_cat = "catch_attri.gdb"
+#arcpy.CreateFileGDB_management(wd, gdbname_cat)
+env.workspace = wd + gdbname_cat
 
 #########################################
 # Drainage characteristics and topography
@@ -264,7 +263,7 @@ arcpy.AlterField_management("profilcurvat","MEAN","CatCurvAvg")
 ZonalStatisticsAsTable(scatch, "Value", dirtz,out_table="dir",ignore_nodata="DATA", statistics_type="MAJORITY")
 arcpy.AlterField_management("dir","MAJORITY","CatDirMaj")
 #Tabulate area on flow dir for accumulation over watersheds
-ras_catcount(in_zone_data=scatch, in_class_data=dirtz, output_wd=wd+gdbname, out_table='dirtabulate',
+ras_catcount(in_zone_data=scatch, in_class_data=dirtz, output_wd=wd+gdbname_cat, out_table='dirtabulate',
              scratch_wd="C:\\temp", pixel_area=outhydro + 'pixelarea')
 for f in arcpy.ListFields('dirtabulate'):
     if 'SUM' in f.name:
@@ -426,7 +425,7 @@ arcpy.PolygonToRaster_conversion(geology,"symbol_nr",geologyras,"MAXIMUM_AREA",p
 ZonalStatisticsAsTable(scatch, "Value", geologyras,out_table="geology",ignore_nodata="DATA", statistics_type="MAJORITY")
 arcpy.AlterField_management("geology", "MAJORITY", "CatGeoMaj")
 #Tabulate area on geology for watershed calculations
-ras_catcount(in_zone_data=scatch, in_class_data=geologyras, output_wd=wd+gdbname, out_table='geologytabulate',
+ras_catcount(in_zone_data=scatch, in_class_data=geologyras, output_wd=wd+gdbname_cat, out_table='geologytabulate',
              scratch_wd="C:\\temp", pixel_area=outhydro + 'pixelarea')
 for tab in arcpy.ListTables('geologytabulate*'):
     for f in arcpy.ListFields(tab):
@@ -457,7 +456,7 @@ soilnowater.save(soilnowaterras)
 ZonalStatisticsAsTable(scatch, "Value", soilnowaterras,out_table="soil",ignore_nodata="DATA", statistics_type="MAJORITY")
 arcpy.AlterField_management("soil", "MAJORITY", "CatSoilMaj")
 #Tabulate area on soil for watershed calculations
-ras_catcount(in_zone_data=scatch, in_class_data=soilnowaterras, output_wd=wd+gdbname, out_table='soiltabulate',
+ras_catcount(in_zone_data=scatch, in_class_data=soilnowaterras, output_wd=wd+gdbname_cat, out_table='soiltabulate',
              scratch_wd="C:\\temp", pixel_area=outhydro + 'pixelarea')
 for tab in arcpy.ListTables('soiltabulate*'):
     for f in arcpy.ListFields(tab):
@@ -485,7 +484,7 @@ arcpy.Delete_management(depthrock3s)
 glhymps = datadir + "GLHYMPS\\GLHYMPS.gdb\\Final_GLHYMPS_Polygon"
 glhympsproj = wd+'glhympsproj.shp'
 sr84 = 4326 #Project to WGS84
-arcpy.Project_management(glhymps , glhympsproj, sr)
+arcpy.Project_management(glhymps , glhympsproj, sr84)
 porosityras= wd + 'porosityras'
 permeabras = wd + 'permeabras'
 cs = (arcpy.GetRasterProperties_management(scatch, 'CELLSIZEX')).getOutput(0)
@@ -512,7 +511,7 @@ arcpy.Clip_management(LC, arcpy.Describe(scatchLC).extent, LCclip,
 LCcleanras = wd+'lcclean.tif'
 LCclean= Con(Raster(LCclip)<100,Raster(LCclip)) #Clean out glitchy pixels with a value of 200
 LCclean.save(LCcleanras)
-ras_catcount(in_zone_data=scatchLC, in_class_data=LCcleanras, output_wd=wd+gdbname, out_table='landcovertabulate',
+ras_catcount(in_zone_data=scatchLC, in_class_data=LCcleanras, output_wd=wd+gdbname_cat, out_table='landcovertabulate',
              scratch_wd="C:\\temp", pixel_area=outhydro + 'pixelarea')
 for tab in arcpy.ListTables('landcovertabulate*'):
     for f in arcpy.ListFields(tab):
@@ -583,12 +582,12 @@ arcpy.MosaicToNewRaster_management(forestlosslist, wd,"forestloss.tif", "",
 forestlossbool=Con(Raster(wd+"forestloss.tif")>0,1,0)
 forestlossboolras = wd+"forestlossbool.tif"
 forestlossbool.save(forestlossboolras)
-#Resample the catchment grid to match Pekel's resolution and alignment
+#Resample the catchment grid to match resolution and alignment
 cs = (arcpy.GetRasterProperties_management(forestlossboolras, 'CELLSIZEX')).getOutput(0)
 arcpy.env.snapRaster = forestlossboolras
 scatchfl = outhydro+"catchgrid118_forestloss"
 arcpy.Resample_management(in_raster=scatch, out_raster=scatchfl,cell_size=cs, resampling_type='NEAREST')
-ras_catcount(scatchfl, forestlossboolras, output_wd=wd+gdbname,out_table="forestloss",scratch_wd="C:\\temp",pixel_area=wd+"pixelarea.tif")
+ras_catcount(scatchfl, forestlossboolras, output_wd=wd+gdbname_cat,out_table="forestloss",scratch_wd="C:\\temp",pixel_area=wd+"pixelarea.tif")
 for f in arcpy.ListFields("forestloss"):
     if 'SUM' in f.name:
         arcpy.AlterField_management("forestloss",f.name,f.name.replace("SUM","CatFLosSum"))
@@ -636,7 +635,7 @@ arcpy.Intersect_analysis([scatchpoly,wdpa],wd+'wdpacatchinters.shp')
 arcpy.AddGeometryAttributes_management(wd+'wdpacatchinters.shp', Geometry_Properties="AREA_GEODESIC", Area_Unit="SQUARE_KILOMETERS")
 arcpy.Statistics_analysis(wd+'wdpacatchinters.shp', "PA", [["AREA_GEO", "SUM"]], case_field="GridID")
 arcpy.AlterField_management("PA","SUM_AREA_GEO","CatPAPer")
-arcpy.Delete_management(wd+'wdpacatchinters')
+arcpy.Delete_management(wd+'wdpacatchinters.shp')
 
 ##
 arcpy.ClearEnvironment('workspace')
@@ -710,9 +709,9 @@ with arcpy.da.UpdateCursor(attriformat, watareafields) as cursor:
 del row
 del cursor
 
-###########################################################
+######################################################################################################################
 #Route attributes to full watershed for each segment
-##############################################################
+#########################################################################################################################
 #Join catchment attributes to drainage lines
 arcpy.MakeFeatureLayer_management(sline,'slinelyr')
 arcpy.AddJoin_management('slinelyr', 'GridID', attriformat, 'GridID', 'KEEP_ALL')
@@ -840,31 +839,37 @@ del cursor
 end = time.time()
 print(end - start)
 
+
 ########################
 #Make a copy of the tables
 arcpy.Copy_management(in_data=memerror_tab,out_data='RufiWs_Attri_Sum_MemoryError_20180324')
 arcpy.Copy_management(in_data=out_tab,out_data=out_tab+'_20180324')
+#Delete dummy first line in memerror_tab
+with arcpy.da.UpdateCursor(memerror_tab, ['GridID']) as cursor:
+    for row in cursor:
+        if row[0] == 999999:
+            cursor.deleteRow()
+del row, cursor
 #Edit field names and types for both tables to match
 for fd in arcpy.ListFields(out_tab):
     if 'Cat' in fd.name: arcpy.AlterField_management(out_tab, fd.name, new_field_name=fd.name.replace('Cat','Ws'))
-    if 'Cat' in fd.aliasName: arcpy.AlterField_management(out_tab, fd.name, new_field_alias=fd.aliasName.replace('Cat','Ws'))
+    if 'Cat' in fd.aliasName: arcpy.AlterField_management(out_tab, fd.name.replace('Cat','Ws'), new_field_alias=fd.aliasName.replace('Cat','Ws'))
 tab1_fields=[f.name for f in arcpy.ListFields(out_tab)]
 for fd in arcpy.ListFields(memerror_tab):
     if 'Cat' in fd.name or 'SUM_' in fd.name: arcpy.AlterField_management(memerror_tab, fd.name, new_field_name=fd.name.replace('Cat','Ws').replace('SUM_',''))
-    if 'Cat' in fd.aliasName or 'SUM_' in fd.aliasName: arcpy.AlterField_management(memerror_tab, fd.name, new_field_alias=fd.name.replace('Cat','Ws').replace('SUM_',''))
+    if 'Cat' in fd.aliasName or 'SUM_' in fd.aliasName: arcpy.AlterField_management(memerror_tab, fd.name.replace('Cat','Ws').replace('SUM_',''), new_field_alias=fd.name.replace('Cat','Ws').replace('SUM_',''))
 try:
     arcpy.DeleteField_management(memerror_tab,'FREQUENCY')
 except Exception:
     e = sys.exc_info()[1]
     print(e.args[0])
 #Modify 'WsMineden' field type
-arcpy.AlterField_management(memerror_tab, 'WsMineDen', field_type='LONG')
-arcpy.AddField_management(memerror_tab, field_name='WsMineDen2', field_type=[f.type for f in arcpy.ListFields(out_tab) if f.name=='WsMineDen'][0])
-arcpy.CalculateField_management(memerror_tab, field='WsMineDen2', expression='int(!WsMineDen!)',expression_type="PYTHON")
-arcpy.DeleteField_management(memerror_tab, 'WsMineDen')
-arcpy.AlterField_management(memerror_tab, field='WsMineDen2', new_field_name='WsMineDen',new_field_alias='WsMineDen')
+arcpy.AddField_management(out_tab, field_name='WsMineDen2', field_type=[f.type for f in arcpy.ListFields(memerror_tab) if f.name=='WsMineDen'][0])
+arcpy.CalculateField_management(out_tab, field='WsMineDen2', expression='!WsMineDen!',expression_type="PYTHON")
+arcpy.DeleteField_management(out_tab, 'WsMineDen')
+arcpy.AlterField_management(out_tab, field='WsMineDen2', new_field_name='WsMineDen',new_field_alias='WsMineDen')
 #Check for differences among tables
-comparetabs=arcpy.TableCompare_management(out_tab, memerror_tab, sort_field='GridID', compare_type='SCHEMA_ONLY',continue_compare='CONTINUE_COMPARE',out_compare_file=wd+'compare2')
+comparetabs=arcpy.TableCompare_management(out_tab, memerror_tab, sort_field='GridID', compare_type='SCHEMA_ONLY',continue_compare='CONTINUE_COMPARE',out_compare_file=wd+'compare')
 #Append tables
 arcpy.Append_management(memerror_tab, out_tab, 'TEST')
 arcpy.Delete_management(wd+'compare2')
@@ -885,15 +890,16 @@ if len(duplicates)>0:
         else:
             #print(sub[0])
             ldel.append(sub[0])
-expr= 'NOT "OBJECTID" IN ' + str(tuple(ldel)) + 'OR "GridID"=999999'
+expr= 'NOT "OBJECTID" IN ' + str(tuple(ldel))
 arcpy.MakeTableView_management(out_tab, out_view='RufiWs_Attri_Sum_view', where_clause=expr)
 arcpy.CopyRows_management('RufiWs_Attri_Sum_view','RufiWs_Attri_Sum_nodupli')
-rufiws_tab='RufiWs_Attri'
+rufiws_tab=gdbname_ws+'RufiWs_Attri'
 arcpy.CopyRows_management('RufiWs_Attri_Sum_view',rufiws_tab)
 arcpy.Delete_management(out_tab+'_identical')
+arcpy.Delete_management(wd+'compare')
 
 #Compute final variables for watersheds
-areadivlist = [f.name for f in arcpy.ListFields(rufiws_tab) if not f.name in ['OBJECTID','WsWatOcc','WsWatcha','WsWatSea','WsLen_1','GridID']] #Keep area as first field
+areadivlist = [f.name for f in arcpy.ListFields(rufiws_tab) if not f.name in ['OBJECTID','WsWatOcc','WsWatcha','WsWatSea','WsLen_1','GridID','WsRoadDen','WsDamDen','WsMineDen','WsPAPer']] #Keep area as first field and don't divide for dam, roads, mines, and PA density
 watextdivlist = ['WsWatExt','WsWatOcc','WsWatcha','WsWatSea']
 with arcpy.da.UpdateCursor(rufiws_tab,watextdivlist) as cursor:
     for row in cursor:
@@ -934,29 +940,62 @@ with arcpy.da.UpdateCursor(rufiws_tab, ['WsFLosSum_0','WsFLosSum_1']) as cursor:
         cursor.updateRow(row)
 arcpy.DeleteField_management(rufiws_tab,'WsFLosSum_0')
 
-############################
+########################################################################################################################
+# Get remaining reach characteristics
+########################################################################################################################
+gdbname_reach = "reach_attri.gdb"
+arcpy.CreateFileGDB_management(wd,gdbname_reach)
+env.workspace = wd + gdbname_reach
+
+#Elevation
+ZonalStatisticsAsTable(sseg, "Value", wd+"srtmclean90",out_table="elv",ignore_nodata="DATA", statistics_type="MIN_MAX_MEAN")
+arcpy.AlterField_management("elv","MEAN","ReaElvAvg")
+arcpy.AlterField_management("elv","MIN","ReaElvMin")
+arcpy.AlterField_management("elv","MAX","ReaElvMax")
+#Direction
+ZonalStatisticsAsTable(sseg, "Value", dirtz,out_table="dir",ignore_nodata="DATA", statistics_type="MAJORITY")
+arcpy.AlterField_management("dir","MAJORITY","ReaDirMaj")
+#Curvature
+ZonalStatisticsAsTable(sseg, "Value", wd+"profilcurvat",out_table="profilcurvat",ignore_nodata="DATA", statistics_type="MEAN")
+arcpy.AlterField_management("profilcurvat","MEAN","ReaCurvAvg")
+#Protected areas
+wdpa = datadir+'WDPA_Mar2018_Public\\WDPA_Mar2018_Public.gdb\\WDPA_poly_Mar2018'
+arcpy.Intersect_analysis([sline,wdpa],wd+'wdpalineinters.shp')
+arcpy.AddGeometryAttributes_management(wd+'wdpalineinters.shp', Geometry_Properties="LENGTH_GEODESIC", Length_Unit="KILOMETERS")
+arcpy.Statistics_analysis(wd+'wdpalineinters.shp', "PA", [["LENGTH_GEO", "SUM"]], case_field="GridID")
+arcpy.AlterField_management("PA","SUM_LENGTH_GEO","ReaPAPer")
+arcpy.Delete_management(wd+'wdpalineinters.shp')
+
+arcpy.MakeTableView_management("elv","elvview")
+arcpy.AddJoin_management("elvview", 'Value', "dir", 'Value')
+arcpy.AddJoin_management("elvview", 'Value', "profilcurvat", 'Value')
+arcpy.AddJoin_management("elvview", 'Value', "PA", 'GridID')
+arcpy.CopyRows_management('elvview','reach_attri') #Crashes so do it in arcmap + remove redundant fields
+
+arcpy.ClearEnvironment('workspace')
+########################################################################################################################
 # Generate final dataset
-################################
+########################################################################################################################
 finalgdb = wd+'rufiji_final.gdb\\'
 arcpy.CreateFileGDB_management(wd, 'rufiji_final.gdb')
 arcpy.MakeFeatureLayer_management(sline, 'slineattrilyr')
 #Join catchment attributes
 arcpy.AddJoin_management('slineattrilyr', 'GridID', gdbname_ws +'catchment_attributes','GridID')
 #Add profile curvature
-arcpy.AddJoin_management('slineattrilyr', 'GridID', wd + gdbname +'\\profilcurvat','Value')
+arcpy.AddJoin_management('slineattrilyr', 'GridID', wd + gdbname_cat +'\\profilcurvat','Value')
 #Create subnetwork for Rufiji
 arcpy.SelectLayerByLocation_management('slineattrilyr', 'INTERSECT', datadir+'sharepoint20180316\\gis\\hydro\\rufiji\\rufiji_subbasins.shp',selection_type='NEW_SELECTION')
-slinerufi = finalgdb +'streamnet118_rufiji'
-arcpy.CopyFeatures_management('slineattrilyr', slinerufi) #Sometimes crashes with join.
+slineruficat = finalgdb +'streamnet118_rufiji_cat'
+arcpy.CopyFeatures_management('slineattrilyr', slineruficat) #Sometimes crashes with join.
 arcpy.Delete_management('slineattrilyr')
-arcpy.DeleteField_management(slinerufi, ['OBJECTID_1','HydroID_1','GridID_1','OBJECTID_12','Value','COUNT','AREA'])
+arcpy.DeleteField_management(slineruficat, ['OBJECTID_1','HydroID_1','GridID_1','OBJECTID_12','Value','COUNT','AREA'])
 
 #For land cover, direction, geology,and soil, compute percentage (for each row, dividing by sum over all fields) and identify field which is majority
 for var in ['Dir','Geol','LC','Soil']:
-    arcpy.AddField_management(in_table=slinerufi,field_name='Cat{}Maj'.format(var),field_type='TEXT')
-    varfields = [f.name for f in arcpy.ListFields(slinerufi, '{}Sum*'.format(var))]
+    arcpy.AddField_management(in_table=slineruficat,field_name='Cat{}Maj'.format(var),field_type='TEXT')
+    varfields = [f.name for f in arcpy.ListFields(slineruficat, '{}Sum*'.format(var))]
     varfields.insert(0, 'Cat{}Maj'.format(var))
-    with arcpy.da.UpdateCursor(slinerufi, varfields) as cursor:
+    with arcpy.da.UpdateCursor(slineruficat, varfields) as cursor:
         for row in cursor:
             if row[1] is not None: denom=sum(row[1:]) #Sometimes geology was not computed for some watershed because of small boundaries of geology data
             for i in range(1,len(varfields)):
@@ -965,21 +1004,72 @@ for var in ['Dir','Geol','LC','Soil']:
                 if row[i] is not None:
                     row[i]=row[i]/denom #Compute percentage area for each category
             cursor.updateRow(row)
-    del row
-    del cursor
+    del row, cursor
 #For forest loss, compute percentage and get rid of WsFLosSum_0 field
-with arcpy.da.UpdateCursor(slinerufi, ['CatFLosSum_0','CatFLosSum_1']) as cursor:
+with arcpy.da.UpdateCursor(slineruficat, ['CatFLosSum_0','CatFLosSum_1']) as cursor:
     for row in cursor:
         row[1]=row[1]/sum(row)
         cursor.updateRow(row)
-arcpy.DeleteField_management(slinerufi, 'CatFLosSum_0')
+arcpy.DeleteField_management(slineruficat, 'CatFLosSum_0')
 
-#Fill in watershed attributes for streams of first order
-#Compute mines densities for catchment and watershed
-#Compute road densities for catchment and watershed
-#Compute drainage density for catchment and watershed
-#Compute
+#Fill in watershed attributes for streams of first order (i.e. append catchment attributes)
+arcpy.MakeFeatureLayer_management(slineruficat, 'slineruficatlyr')
+arcpy.SelectLayerByAttribute_management('slineruficatlyr', 'NEW_SELECTION', 'ReaOrd=1')
+rufiorder1=finalgdb +'rufiji_catattri_order1'
+arcpy.CopyRows_management('slineruficatlyr',rufiorder1)
 
-#Check for missing records
-#Delete useless variables
-#Compute reach scale and buffer scale variables and add them
+appfields=[f.name for f in arcpy.ListFields(rufiorder1) if f.name not in ['Shape_Length','CatFlowAcc','CatElvMin','CatElvMax','CatCurvAvg','CatLakInd','CatResInd']][9:]
+appfields.insert(0,'OBJECTID')
+appfields.append('GridID')
+len(appfields)
+len([f.name for f in arcpy.ListFields(rufiws_tab)])
+arcpy.DeleteField_management(rufiorder1, [f.name for f in arcpy.ListFields(rufiorder1) if f.name not in appfields])
+for fd in arcpy.ListFields(rufiorder1): #Edit field names and types for both tables to match
+    if 'Cat' in fd.name: arcpy.AlterField_management(rufiorder1, fd.name, new_field_name=fd.name.replace('Cat','Ws'))
+    if 'Cat' in fd.aliasName: arcpy.AlterField_management(rufiorder1, fd.name.replace('Cat','Ws'), new_field_alias=fd.aliasName.replace('Cat','Ws'))
+
+arcpy.Merge_management(inputs=[rufiws_tab,rufiorder1],output=finalgdb+'rufiji_wsattri_all')
+arcpy.Delete_management(rufiorder1)
+
+#Join watershed attributes
+arcpy.MakeFeatureLayer_management(slineruficat, 'slineruficatlyr')
+arcpy.AddJoin_management('slineruficatlyr', 'GridID', finalgdb+'rufiji_wsattri_all', 'GridID')
+slineruficatws = finalgdb +'streamnet118_rufiji_catws'
+arcpy.CopyFeatures_management('slineruficatlyr', slineruficatws)
+
+
+
+
+#RUN
+arcpy.DeleteField_management(slineruficatws, ['OBJECTID_1','GridID_1'])
+
+#Compute mines, dams, road, PA, and drainage densities for catchment and watershed
+arcpy.AddField_management(slineruficatws, 'CatDen', field_type='DOUBLE')
+arcpy.AddField_management(slineruficatws, 'WsDen', field_type='DOUBLE')
+with arcpy.da.UpdateCursor(slineruficatws, ['CatArea','CatLen_1','CatDen','CatRoadDen','CatDamDen','CatMineDen','CatPAPer']) as cursor:
+    for row in cursor:
+        row[2]=row[1]/row[0]
+        row[3]=row[3]/row[0]
+        row[4]=row[4]/row[0]
+        row[5]=row[5]/row[0]
+        cursor.updateRow(row)
+    del row, cursor
+with arcpy.da.UpdateCursor(slineruficatws, ['WsArea','WsLen_1','WsDen','WsRoadDen','WsDamDen','WsMineDen','WsPAPer']) as cursor:
+    for row in cursor:
+        row[2]=row[1]/row[0]
+        row[3]=row[3]/row[0]
+        row[4]=row[4]/row[0]
+        row[5]=row[5]/row[0]
+        cursor.updateRow(row)
+    del row, cursor
+
+###############################
+# Add reach characteristics
+arcpy.MakeFeatureLayer_management(slineruficatws, 'slineruficatws_lyr')
+arcpy.AddJoin_management('slineruficatws_lyr', 'GridID', wd + gdbname_reach + 'reach_attri','GridID')
+slinerufifinal = finalgdb +'streamnet118_rufiji_final'
+arcpy.CopyFeatures_management('slineruficatws_lyr', slinerufifinal)
+
+#Compute reach slope
+arcpy.AddField_management(slinerufifinal, field_name='ReaSloAvg',field_type='FLOAT')
+arcpy.CalculateField_management(slinerufifinal, 'ReaSloAvg', "math.degrees(math.atan((!ReaElvMax!-!ReaElvMin!)/(1000*!CatLen_1!)))", expression_type='PYTHON3')
