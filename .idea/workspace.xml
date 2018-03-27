@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
 <<<<<<< HEAD
+<<<<<<< HEAD
     <list default="true" id="b7b59ab2-aa38-4d0d-94ca-ed7e9bcaea86" name="Default" comment="Project folder upload">
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/data_prep.py" afterPath="$PROJECT_DIR$/data_prep.py" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
@@ -9,6 +10,9 @@
 =======
     <list default="true" id="b7b59ab2-aa38-4d0d-94ca-ed7e9bcaea86" name="Default" comment="Project folder upload" />
 >>>>>>> 6f18be3c14d2533acd2619f4427159022a6cbdd1
+=======
+    <list default="true" id="b7b59ab2-aa38-4d0d-94ca-ed7e9bcaea86" name="Default" comment="Project folder upload" />
+>>>>>>> 13e49b26964be204231aed5a858e73ce65109ecd
     <ignored path="TZclass.iws" />
     <ignored path=".idea/workspace.xml" />
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -32,18 +36,24 @@
         <entry file="file://$PROJECT_DIR$/data_prep.py">
           <provider selected="true" editor-type-id="text-editor">
 <<<<<<< HEAD
+<<<<<<< HEAD
             <state vertical-scroll-proportion="-2.2449324">
               <caret line="804" column="44" selection-start-line="804" selection-start-column="44" selection-end-line="804" selection-end-column="44" />
               <folding>
                 <element signature="e#340#352#0" expanded="true" />
 =======
+=======
+>>>>>>> 13e49b26964be204231aed5a858e73ce65109ecd
             <state vertical-scroll-proportion="0.21136767">
               <caret line="849" column="0" selection-start-line="849" selection-start-column="0" selection-end-line="902" selection-end-column="18" />
               <folding>
                 <element signature="e#340#352#0" expanded="true" />
                 <element signature="e#1584#3714#0" expanded="false" />
                 <element signature="e#3885#6931#0" expanded="false" />
+<<<<<<< HEAD
 >>>>>>> 6f18be3c14d2533acd2619f4427159022a6cbdd1
+=======
+>>>>>>> 13e49b26964be204231aed5a858e73ce65109ecd
               </folding>
             </state>
           </provider>
@@ -61,10 +71,14 @@
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
 <<<<<<< HEAD
+<<<<<<< HEAD
         <entry key="$PROJECT_DIR$" value="max_watershed_statistics" />
 =======
         <entry key="$PROJECT_DIR$" value="master" />
 >>>>>>> 6f18be3c14d2533acd2619f4427159022a6cbdd1
+=======
+        <entry key="$PROJECT_DIR$" value="master" />
+>>>>>>> 13e49b26964be204231aed5a858e73ce65109ecd
       </map>
     </option>
   </component>
@@ -316,10 +330,14 @@
       <window_info id="Application Servers" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Python Console" active="true" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.32900432" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
 <<<<<<< HEAD
+<<<<<<< HEAD
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32864866" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
 =======
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32900432" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
 >>>>>>> 6f18be3c14d2533acd2619f4427159022a6cbdd1
+=======
+      <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32900432" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
+>>>>>>> 13e49b26964be204231aed5a858e73ce65109ecd
       <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.24973656" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32900432" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
@@ -361,6 +379,7 @@
     <entry file="file://$PROJECT_DIR$/data_prep.py">
       <provider selected="true" editor-type-id="text-editor">
 <<<<<<< HEAD
+<<<<<<< HEAD
         <state vertical-scroll-proportion="0.0">
           <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
           <folding>
@@ -376,13 +395,18 @@
           <folding>
             <element signature="e#340#352#0" expanded="true" />
 =======
+=======
+>>>>>>> 13e49b26964be204231aed5a858e73ce65109ecd
         <state vertical-scroll-proportion="0.21136767">
           <caret line="849" column="0" selection-start-line="849" selection-start-column="0" selection-end-line="902" selection-end-column="18" />
           <folding>
             <element signature="e#340#352#0" expanded="true" />
             <element signature="e#1584#3714#0" expanded="false" />
             <element signature="e#3885#6931#0" expanded="false" />
+<<<<<<< HEAD
 >>>>>>> 6f18be3c14d2533acd2619f4427159022a6cbdd1
+=======
+>>>>>>> 13e49b26964be204231aed5a858e73ce65109ecd
           </folding>
         </state>
       </provider>
