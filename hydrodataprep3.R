@@ -6,7 +6,7 @@
 #Authors: Mathis L. Messager and Dr. Julian D. Olden
 #Contact info: messamat@uw.edu
 #Date created: 03/22/2018
-#Date last updated: 03/24/2018
+#Date last updated: 03/26/2018
 
 #Purpose: visualize, assess quality, and perform preliminary clean-up of hydrological data in the Rufiji river basin, provided by CDMSmith Zach T. Eichenwald
 
@@ -19,6 +19,26 @@ library(compare)
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
 datadir = file.path(getwd(),paste('rufiji_hydrodataraw','20180324',sep='_')) #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
+
+#Function to remove spurious constant values
+remove_constant <- function(gage_data, gap_n=20) {
+  gage_data[1,'Flag2'] <- 0
+  delist <- list()
+  for (i in 2:nrow(gage_data)){
+    if (gage_data[i,'Flow'] == gage_data[i-1,'Flow']){
+      gage_data[i,'Flag2'] <- gage_data[i-1,'Flag2']+1
+    } else {
+      gage_data[i,'Flag2'] <- 0
+    }
+    if (gage_data[i,'Flag2'] == gap_n) {
+      delist <- c(delist, gage_data[(i-19):i,'Date'])
+    } 
+    if (gage_data[i,'Flag2'] > gap_n) {
+      delist <- c(delist, gage_data[i,'Date'])
+    }
+  }
+  return(delist)
+}
 
 setClass('myDate')
 #setAs("character","myDate", function(from)  as.POSIXlt(from, format= "%Y-%m-%d %H:%M:%S"))
@@ -109,7 +129,6 @@ for (gage in unique(rufidat_screenform$ID)) {
   dev.off()
 }
 
-
 ####################################################################################
 # Clean out obviously spurious data based on preliminary observation
 ####################################################################################
@@ -172,24 +191,6 @@ rufidat_clean <- rufidat_clean[rufidat_clean$ID!='1KB33',]
 ###1KB4A	KILOMBERO RIVER AT IFWEMA: long periods of spurious values
 g1KB4A<-rufidat_clean[rufidat_clean$ID=='1KB4A',]
 #Compute length of repetition and remove all records associated with periods of constant values of at least 20 days
-remove_constant <- function(gage_data, gap_n=20) {
-  gage_data[1,'Flag2'] <- 0
-  delist <- list()
-  for (i in 2:nrow(gage_data)){
-    if (gage_data[i,'Flow'] == gage_data[i-1,'Flow']){
-      gage_data[i,'Flag2'] <- gage_data[i-1,'Flag2']+1
-    } else {
-      gage_data[i,'Flag2'] <- 0
-    }
-    if (gage_data[i,'Flag2'] == gap_n) {
-      delist <- c(delist, gage_data[(i-19):i,'Date'])
-    } 
-    if (gage_data[i,'Flag2'] > gap_n) {
-      delist <- c(delist, gage_data[i,'Date'])
-    }
-  }
-  return(delist)
-}
 g1KB4A_delist <- remove_constant(g1KB4A)
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB4A' & rufidat_clean$Date %in% g1KB4A_delist),] 
 
@@ -231,21 +232,10 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow
 #Create dataset of deleted values
 rufidat_deleted <- anti_join(rufidat_screenform, rufidat_clean, by=c("ID","Date"))
 
-##########################################
-#Assess general record characteristics
-rufidat$month <- as.numeric(format(rufidat$Date.Time, "%m"))
+########################################
+#Export data to directory
+########################################
+write.csv(rufidat_clean, file.path(outdir,'rufidat_clean.csv'),row.names = F)
+write.csv(rufidat_deleted, file.path(outdir,'rufidat_deleted.csv'),row.names = F)
 
 
-
-#Test range of maximum gap length per year and total percentage missing data
-
-#####
-
-#To do:
-#Get summary statistics on 
-# grain of data
-# length of record
-# completeness in terms of frequency, length, and time periods of gaps
-# overlap in terms of period and length
-#Test range of acceptance criteria (15 years, etc.)
-#Evaluate consistency of discharge with drainage area and precipitation + HydroSHEDS modeled data
