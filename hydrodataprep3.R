@@ -8,13 +8,14 @@
 #Date created: 03/22/2018
 #Date last updated: 03/24/2018
 
-#Purpose: visualize and assess quality and quantity of hydrological data in the Rufiji river basin, provided by CDMSmith Zach T. Eichenwald
+#Purpose: visualize, assess quality, and perform preliminary clean-up of hydrological data in the Rufiji river basin, provided by CDMSmith Zach T. Eichenwald
 
 library(ggplot2)
 library(data.table)
 library(FlowScreen) #to inspect data
 library(waterData) #to import USGS data
 library(prospectr) #for sg derivative
+library(compare)
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
 datadir = file.path(getwd(),paste('rufiji_hydrodataraw','20180324',sep='_')) #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
@@ -114,73 +115,127 @@ for (gage in unique(rufidat_screenform$ID)) {
 rufidat_clean <- rufidat_screenform
 ###1KA2A	LITTLE RUAHA AT NDIUKA: period 1995 to late 2011 seems suspect: remove
 #                                 Lots of missing data, appears like low-flow part of the year was cut-off or everything was shifted up?
-#g1KA2A<-rufidat_clean[rufidat_clean$ID=='1KA2A',]
-rufidat_deleted <- rufidat_clean[(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>'1994-12-19' & rufidat_clean$Date<'2001-09-05'),] 
+g1KA2A<-rufidat_clean[rufidat_clean$ID=='1KA2A',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>'1994-12-19' & rufidat_clean$Date<'2001-09-05'),] 
+
 ###1KA4A	GREAT RUAHA AT MSOSA: seems like stage measurements corresponding to a discharge right over 100cms are spurious as they plateau, 
-#                               but not picked up by derivative. Will be kept.
+#                               but not picked up by derivative. Will be kept (seem like the discharge at which there are spot measurements).
+
 ###1KA9	KIMANI RIVER AT OLD GN: very large peak in 1988 seems spurious as 02/22:131,02/23:>20,000,02/24:350 cms
-#g1KA9<-rufidat_clean[rufidat_clean$ID=='1KA9',]
-rufidat_deleted <- rbind(rufidat_deleted,rufidat_clean[(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),]) 
-rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),] 
-###1KA15A	NDEMBERA AT ILONGO: data prior to 1970 are wonky. 
-#ZTE posits that ' Old data are the outliers on the curve - possibility of old station (pre 1970) at different location?.  
 g1KA9<-rufidat_clean[rufidat_clean$ID=='1KA9',]
-rufidat_deleted <- rbind(rufidat_deleted,rufidat_clean[(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),]) 
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),] 
 
+###1KA15A	NDEMBERA AT ILONGO: data prior to 1968 are wonky. 
+#ZTE posits that ' Old data are the outliers on the curve - possibility of old station (pre 1970) at different location?.  
+g1KA15A<-rufidat_clean[rufidat_clean$ID=='1KA15A',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA15A' & rufidat_clean$Date<'1968-01-01'),]
 
+###1KA21A	LITTLE RUAHA AT IHIMBU: data prior to 1967-11-23 area wonky 
+g1KA21A<-rufidat_clean[rufidat_clean$ID=='1KA21A',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA21A' & rufidat_clean$Date<'1967-11-23'),]
 
-###1KA21A	LITTLE RUAHA AT IHIMBU
-###1KA22	MTITU AT MTITU
-###1KA27	GREAT RUAHA AT MKUPULE
+###1KA22	MTITU AT MTITU: first few observations are spurious
+g1KA22<-rufidat_clean[rufidat_clean$ID=='1KA22',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA22' & rufidat_clean$Date<'1957-05-27'),]
 
-###1KA31	LITTLE RUAHA AT MAWENDE
-###1KA32A	LITTLE RUAHA AT MAKALALA
-###1KA33B	NDEMBERA AT MADIBILA
-###1KA37A	LUKOSI AT MTANDIKA
-###1KA38A	YOVI AT YOVI
-###1KA41	KIZIGO AT ILANGALI
-###1KA42A	KIZIGO RIVER AT CHINUGULU
-##
-###1KA50B	MSWISWI AT WILIMA
-###1KA51A	UMROBO AT GNR
-###1KA57A	MWEGA AT MALOLO
-###1KA59	GREAT RUAHA AT MSEMBE FERRY
-###1KA66	MLOWO AT ILONGO
-###1KA71	GREAT RUAHA AT NYALUHANGA
+###1KA32A	LITTLE RUAHA AT MAKALALA: remove all 0 values prior to 1970
+rufidat_deleted <- rbind(rufidat_deleted,rufidat_clean[(rufidat_clean$ID=='1KA32A' & rufidat_clean$Date<'1970-01-01' & rufidat_clean$Flow==0),]) 
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA32A' & rufidat_clean$Date<'1970-01-01' & rufidat_clean$Flow==0),]
 
+###1KA37A	LUKOSI AT MTANDIKA: look wonky prior to 1968, also appears to be a flow duration curve break around 10 cms?
+g1KA37A<-rufidat_clean[rufidat_clean$ID=='1KA37A',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA37A' & rufidat_clean$Date<'1968-01-01'),]
 
+###1KA41	KIZIGO AT ILANGALI: seems like there was a shift in bed morphology post-2000. Overestimated 0-flows lead to long period of constant
+#                             positive flow. Could also be some odd interpolation? 
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA41' & rufidat_clean$Date>'2000-01-01'),]
 
-###1KB14A	LUMEMO AT KIBURUBUTU:
-###1KB15A	MNGETA RIVER AT MCHOMBE
-###1KB16C	FURUA AT MALINYI
-###1KB17A	KILOMBERO RIVER AT SWERO
-###1KB18B	RUHUDJI BELOW KIFUNG'A FALLS
-###1KB19A	HAGAFIRO AT HAGAFIRO
-###1KB24	SANJE RIVER AT SANJE
-###1KB33	KIHANSI BELOW KIHANSI DAM: only contains -999: remove
-rufidat <- rufidat[rufidat$Gage.ID!='1KB33',]
+###1KA42A	KIZIGO RIVER AT CHINUGULU: Many instances of long zero flow period post 1993, could be due either to overwithdrawal or 
+#                                     shift in bed morphology leading to spurious zero flows
 
-###1KB36	MGUGWE RIVER AT MGUGWE
-###1KB36	MGUGWE RIVER AT MGUGWE
-###1KB4A	KILOMBERO RIVER AT IFWEMA
-###1KB8B	MPANGA RIVER AT MPANGA MISSION
-###1KB9	MNYERA RIVER AT TAWETA
-R
+###1KA50B	MSWISWI AT WILIMA: according to ZTE: 'Records poor pre 1968, post 1999. Possible station moved in 1999?' consider removing pre-1968
 
+###1KA59	GREAT RUAHA AT MSEMBE FERRY: definite shift pre- and post-1987-1990 gap. Most likely different 
+#ZTE: "No RC info for prior to 1994. Suspect poor records prior to 1990 when new rating curve (and perhaps station) were established. Likely decent records post 1990."
 
+###1KA66	MLOWO AT ILONGO: anomalous period of constant values in late 2005-early 2006 + wonky 1993 data
+g1KA66<-rufidat_clean[rufidat_clean$ID=='1KA66',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA66' & (rufidat_clean$Date<'1994-01-01' | 
+                                                                (rufidat_clean$Date>'2005-07-23' & rufidat_clean$Date<'2006-02-04'))),] 
 
+###1KA71	GREAT RUAHA AT NYALUHANGA: odd systematic break on descending limb in 2003, 2004, and 2005, but kept.
 
+###1KB33	KIHANSI BELOW KIHANSI DAM: only contains -999: remove entirely
+rufidat_clean <- rufidat_clean[rufidat_clean$ID!='1KB33',]
 
+###1KB4A	KILOMBERO RIVER AT IFWEMA: long periods of spurious values
+g1KB4A<-rufidat_clean[rufidat_clean$ID=='1KB4A',]
+#Compute length of repetition and remove all records associated with periods of constant values of at least 20 days
+remove_constant <- function(gage_data, gap_n=20) {
+  gage_data[1,'Flag2'] <- 0
+  delist <- list()
+  for (i in 2:nrow(gage_data)){
+    if (gage_data[i,'Flow'] == gage_data[i-1,'Flow']){
+      gage_data[i,'Flag2'] <- gage_data[i-1,'Flag2']+1
+    } else {
+      gage_data[i,'Flag2'] <- 0
+    }
+    if (gage_data[i,'Flag2'] == gap_n) {
+      delist <- c(delist, gage_data[(i-19):i,'Date'])
+    } 
+    if (gage_data[i,'Flag2'] > gap_n) {
+      delist <- c(delist, gage_data[i,'Date'])
+    }
+  }
+  return(delist)
+}
+g1KB4A_delist <- remove_constant(g1KB4A)
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB4A' & rufidat_clean$Date %in% g1KB4A_delist),] 
 
-#Notes on gages
+###1KB8B	MPANGA RIVER AT MPANGA MISSION: two sets of seemingly low-flow spurious data in 1964 and 1976 
+#                                       (also happen from one day to the next and encompass exactly one month, so remove)
+g1KB8B<-rufidat_clean[rufidat_clean$ID=='1KB8B',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB8B' & ((rufidat_clean$Date>'1963-12-01' & rufidat_clean$Date<'1964-01-30') | 
+                                                                (rufidat_clean$Date>'1976-02-01' & rufidat_clean$Date<'1976-02-29'))),] 
 
+###1KB9	MNYERA RIVER AT TAWETA: long periods of constant values
+g1KB9<-rufidat_clean[rufidat_clean$ID=='1KB9',]
+g1KB9_delist <- remove_constant(g1KB9)
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB9' & rufidat_clean$Date %in% g1KB9_delist),] 
+
+###1KB14A	LUMEMO AT KIBURUBUTU: quite a few spurious constant values post 1995. In addition pre mid-1967 data is off
+g1KB14A<-rufidat_clean[rufidat_clean$ID=='1KB14A',]
+g1KB14A_delist <- remove_constant(g1KB14A)
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB14A' & (rufidat_clean$Date<'1966-07-01' | 
+                                                                 (rufidat_clean$Date %in% g1KB14A_delist))),] 
+
+###1KB15A	MNGETA RIVER AT MCHOMBE: a few spurious low flow values. Less than 20 records.
+g1KB15A<-rufidat_clean[rufidat_clean$ID=='1KB15A',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB15A' & rufidat_clean$Flow < 5),] 
+
+###1KB16C	FURUA AT MALINYI: seemingly spurious 0 values
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB16C' & rufidat_clean$Flow == 0),] 
+
+###1KB17A	KILOMBERO RIVER AT SWERO: seemingly spurious 0 values
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB17A' & rufidat_clean$Flow == 0),] 
+
+###1KB18B	RUHUDJI BELOW KIFUNG'A FALLS: seemingly spurious 0 values and wondy data after April 2010
+g1KB18B<-rufidat_clean[rufidat_clean$ID=='1KB18B',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB18B' & (rufidat_clean$Flow == 0 | rufidat_clean$Date>'2010-06-05')),] 
+
+###1KB19A	HAGAFIRO AT HAGAFIRO: spurious reccurring constant value
+g1KB19A<-rufidat_clean[rufidat_clean$ID=='1KB19A',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow <=0.1812),] 
+
+#################################
+#Create dataset of deleted values
+rufidat_deleted <- anti_join(rufidat_screenform, rufidat_clean, by=c("ID","Date"))
 
 ##########################################
 #Assess general record characteristics
-rufidat$year <- format(rufidat$Date.Time, "%Y")
 rufidat$month <- as.numeric(format(rufidat$Date.Time, "%m"))
+
+
 
 #Test range of maximum gap length per year and total percentage missing data
 #
