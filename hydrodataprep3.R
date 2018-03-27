@@ -109,6 +109,7 @@ for (gage in unique(rufidat_screenform$ID)) {
   dev.off()
 }
 
+
 ####################################################################################
 # Clean out obviously spurious data based on preliminary observation
 ####################################################################################
@@ -208,7 +209,6 @@ g1KB14A<-rufidat_clean[rufidat_clean$ID=='1KB14A',]
 g1KB14A_delist <- remove_constant(g1KB14A)
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB14A' & (rufidat_clean$Date<'1966-07-01' | 
                                                                  (rufidat_clean$Date %in% g1KB14A_delist))),] 
-
 ###1KB15A	MNGETA RIVER AT MCHOMBE: a few spurious low flow values. Less than 20 records.
 g1KB15A<-rufidat_clean[rufidat_clean$ID=='1KB15A',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB15A' & rufidat_clean$Flow < 5),] 
@@ -238,14 +238,8 @@ rufidat$month <- as.numeric(format(rufidat$Date.Time, "%m"))
 
 
 #Test range of maximum gap length per year and total percentage missing data
-#
-
-
-
-res <- metrics.all(ts, Qmax = 0.95, Dur = 5, Qdr = 0.2, WinSize = 30,season = c(4:9), NAthresh = 0.5, language = "English")
 
 #####
-
 
 #To do:
 #Get summary statistics on 
@@ -255,4 +249,3 @@ res <- metrics.all(ts, Qmax = 0.95, Dur = 5, Qdr = 0.2, WinSize = 30,season = c(
 # overlap in terms of period and length
 #Test range of acceptance criteria (15 years, etc.)
 #Evaluate consistency of discharge with drainage area and precipitation + HydroSHEDS modeled data
-#Add StnInfo to screen.summary
