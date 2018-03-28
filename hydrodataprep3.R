@@ -53,7 +53,7 @@ rawplot <- ggplot(rufidat, aes(x=Date.Time, y=Calculated.Flow..cms.)) +
   facet_wrap(~Gage.ID+Station.Name, scale='free') +
   theme_bw() + 
   labs(y='Discharge (m3/s)')
-rawplot
+#rawplot
 #png('rufidat_rawts.png',width = 32, height=16,units='in',res=300)
 #rawplot
 #dev.off()
@@ -63,12 +63,12 @@ rawplot
 #FlowScreen package was developed to work with Water Survey of Canada (WSC) or the United States Geological Survey (USGS) data. 
 
 #Download and import data from USGS using FlowScreen to see output of 'read.flows function'
-# testdat <- importDVs('06135000', code = "00060", stat = "00003", sdate = "1851-01-01",
-#                      edate = as.Date(Sys.Date(), format = "%Y-%m-%d"))
-# testtab=file.path(getwd(),paste('test_',as.character(format(Sys.Date(),'%Y%m%d')),'.csv',sep=""))
-# write.csv(testdat, testtab)
-# test<-read.flows(testtab)
-# colnames(test)
+testdat <- importDVs('06135000', code = "00060", stat = "00003", sdate = "1851-01-01",
+                     edate = as.Date(Sys.Date(), format = "%Y-%m-%d"))
+testtab=file.path(getwd(),paste('test_',as.character(format(Sys.Date(),'%Y%m%d')),'.csv',sep=""))
+write.csv(testdat, testtab)
+test<-read.flows(testtab)
+colnames(test)
 
 #Reproduce data structure from read.flows function
 str(rufidat)
@@ -144,6 +144,10 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>
 ###1KA9	KIMANI RIVER AT OLD GN: very large peak in 1988 seems spurious as 02/22:131,02/23:>20,000,02/24:350 cms
 g1KA9<-rufidat_clean[rufidat_clean$ID=='1KA9',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),] 
+
+###1KA11A seems like data prior to 165 is shifted up, could either be due to change in channel morphology, rating curve, or serious change inf low, remove
+g1KA11A<-rufidat_clean[rufidat_clean$ID=='1KA11A',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA11A' & rufidat_clean$Date<'1964-11-15'),] 
 
 ###1KA15A	NDEMBERA AT ILONGO: data prior to 1968 are wonky. 
 #ZTE posits that ' Old data are the outliers on the curve - possibility of old station (pre 1970) at different location?.  
