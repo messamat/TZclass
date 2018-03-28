@@ -14,6 +14,7 @@ library(ggplot2)
 library(data.table)
 library(FlowScreen) #to inspect data
 library(reshape)
+library(plyr)
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
 datadir = file.path(getwd(),paste('rufiji_hydrodatainspect','20180326',sep='_')) #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
@@ -46,13 +47,38 @@ rufidat_dt$prevgapyr <- as.numeric(rufidat_dt$Date-as.Date(rufidat_dt$prevdateyr
 #regarding entire record
 rufidat_summary <- rufidat_dt[,list(min_year=min(year), max_year=max(year), max_len=max(year)-min(year), 
                                     max_lend=max(Date)-min(Date), gap_d=as.numeric((max(Date)-min(Date)))-length(unique(Date)), gap_per=1-(length(unique(Date))/as.numeric((max(Date)-min(Date)))),
-                                    max_gap = max(prevgap,na.rm=T)
-                                    ),.(ID)]
+                                    max_gap = max(prevgap,na.rm=T))
+                              ,.(ID)]
 #regardomg yearly record
 rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(year, "12", "31", sep="-")), "%j"))-length(unique(Date)),
-                                          gap_per=1-(length(unique(Date))/as.numeric(format(as.Date(paste(year, "12", "31", sep="-")), "%j"))),
-                                          max_gap = max(prevgapyr,na.rm=T)
-                                          ),.(ID,year)]
+                                       gap_per=1-(length(unique(Date))/as.numeric(format(as.Date(paste(year, "12", "31", sep="-")), "%j"))),
+                                       max_gap = max(prevgapyr,na.rm=T))
+                                 ,.(ID,year)]
+
+#Compute number of valid years on record depending on the percentage of missing data tolerated to consider a year valid
+rufidat_gapyear <- data.frame(ID=unique(rufidat_gapsummary$ID))
+for (i in seq(1,0,-0.05)) {
+  df<-ddply(rufidat_gapsummary[rufidat_gapsummary$gap_per<=i,], .(ID), summarise, gcount=length(year))
+  rufidat_gapyear <- merge(rufidat_gapyear,df, by='ID',all.x=T)
+}
+colnames(rufidat_gapyear) <- c('ID',paste('gagecount_gap', seq(1,0,-0.05),sep="_"))
+
+#Compute for a range of durations, the number of stations that have data for at least this duration, for each maximum percentage gap threshold
+rufidat_gapplot <- ldply(seq(5,30,5), function(y) {adply(rufidat_gapyear[,2:ncol(rufidat_gapyear)], 2, function(x) length(which(x>y)))})
+rufidat_gapplot$minyr <- rep(seq(5,30,5), ncol(rufidat_gapyear[,2:ncol(rufidat_gapyear)]))
+
+
+
+
+
+
+
+
+
+ldply(seq(5,30,5), function(x) {adply(fufidat_gapyear[rufidat,1:], 2, ) })
+
+#Graph of 
+
 
 #####
 #To do:
