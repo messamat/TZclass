@@ -5,8 +5,8 @@
 
 #Authors: Mathis L. Messager and Dr. Julian D. Olden
 #Contact info: messamat@uw.edu
-#Date created: 03/26/2018
-#Date last updated: 03/28/2018
+#Date created: 03/28/2018
+#Date last updated: 03/29/2018
 
 #Purpose: impute/infill missing discharge data for all stream gauges
 
@@ -35,8 +35,8 @@ rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('
 ################################################
 #Infilling/Interpolate data
 ################################################
-rufidat_clean$Flowlog <- log(rufidat_clean$Flow+0.01)
-rufidat_cast <- dcast(rufidat_clean, Date~ID, value.var='Flowlog')
+#rufidat_clean$Flowlog <- log(rufidat_clean$Flow+0.01)
+rufidat_cast <- dcast(rufidat_clean, Date~ID, value.var='Flow')
 
 #Try auto.arima from forecast package and KalmanSmoother, inspired from  https://stats.stackexchange.com/questions/104565/how-to-use-auto-arima-to-impute-missing-values
 #Function to find the index, for each row, of the previous row with a non-NA value
@@ -57,51 +57,71 @@ na.lomb <- function(x) {
     zoo::na.locf(y, fromLast = TRUE)
   }
 }
-#Function to fill gaps for one stream gauge based on an ARIMAX model using time series characteristics from that gauge and the other 
+#Function to fill gaps for one stream gauge based on an ARIMAX model and Kalman smoother using time series characteristics from that gauge and the other 
 #gages as exogenous regressors.
 #tscast data frame where the first is called 'Date' and contains dates and all the other columns are time flow series
 #sn: column of the time series to be infilled
 #maxgap: maximum gap length to be imputed
+tscast=rufidat_cast
+sn=2
+maxgap=30
+
 CustomImpute <- function(tscast, sn, maxgap) {
-  name<- colnames(tscast)[sn]
-  print(name)
-  #Restrict analysis to min and max year of records
-  mindate <- tscast[min(which(!is.na(tscast[,sn]))),'Date']
-  maxdate <- tscast[max(which(!is.na(tscast[,sn]))),'Date']
-  tscastsub <- tscast[tscast$Date>mindate & tscast$Date<maxdate,]
-  #Compute size of gap a record belongs to
-  tscastsub$prevdate <- tscastsub[na.lomf(tscastsub[,sn]),'Date']
-  tscastsub$nextdate <- tscastsub[na.lomb(tscastsub[,sn]),'Date']
-  tscastsub$gap <- as.numeric(as.Date(tscastsub$nextdate)-as.Date(tscastsub$prevdate))
-  tscastsub <- as.data.frame(tscastsub)
-  #Fit an ARIMAX model
-  pred <- tscastsub[,sn]
-  fit <- auto.arima(tscastsub[,sn],xreg=tscastsub[,-c(1,sn,ncol(tscastsub)-c(0,1,2))])
-  #summary(fit)
-  id.na <- which((tscastsub$prevgap<=maxgap &
-                    is.na(tscastsub[,sn])))
-  #Kalman smoother
-  kr <- KalmanSmooth(tscastsub[,sn], fit$model)
-  for (i in id.na)
-    pred[i] <- fit$model$Z %*% kr$smooth[i,]
-  #Output observed and predicted predicted data
-  df_pred <- data.frame(Date=tscastsub[id.na,'Date'],pred=pred[id.na])
+  if (sn > 1) {
+    name<- colnames(tscast)[sn]
+    print(name)
+    #Restrict analysis to min and max year of records
+    mindate <- tscast[min(which(!is.na(tscast[,sn]))),'Date']
+    maxdate <- tscast[max(which(!is.na(tscast[,sn]))),'Date']
+    tscastsub <- tscast[tscast$Date>mindate & tscast$Date<maxdate,]
+    #Compute size of gap a record belongs to
+    tscastsub$prevdate <- tscastsub[na.lomf(tscastsub[,sn]),'Date']
+    tscastsub$nextdate <- tscastsub[na.lomb(tscastsub[,sn]),'Date']
+    tscastsub$gap <- as.numeric(as.Date(tscastsub$nextdate)-as.Date(tscastsub$prevdate))
+    tscastsub <- as.data.frame(tscastsub)
+    #Only use data from stream gauges that have at least 50% of overlapping non-NA data with that streamgauge
+    overlap <- adply(tscastsub[!is.na(tscastsub[,sn]),-c(1,sn,ncol(tscastsub)-c(0,1,2))],2,function(x) {
+      length(which(!is.na(x)))/length(which(!is.na(tscastsub[,sn])))
+      })
+    covar <- which(colnames(tscastsub)%in%overlap[overlap$V1>=0.5,'X1'])
+    #Fit an ARIMAX model
+    pred <- tscastsub[,sn]
+    #fit <- auto.arima(tscastsub[,sn],xreg=tscastsub[,covar])
+    fit <- auto.arima(ts(tscastsub[,sn],frequency=365),D=1, approximation=F)
+    #xreg=ts(tscastsub[,covar], frequency=365)
+    #summary(fit)
+    id.na <- which((tscastsub$gap<=maxgap &
+                      is.na(tscastsub[,sn])))
+    #Kalman smoother
+    kr <- KalmanSmooth(tscastsub[,sn], fit$model)
+    for (i in id.na)
+      pred[i] <- fit$model$Z %*% kr$smooth[i,]
+    #Output observed and predicted predicted data
+    df_pred <- data.frame(Date=tscastsub[id.na,'Date'],pred=pred[id.na])
+    return(df_pred)
+  } else {
+    warning('sn must be >1 as 1st column must be "Date"')
+  }
 }
 
-CustomImpute
+impute_preds <- data.frame(Date=rufidat_cast[,"Date"])
+for (i in 2:(ncol(rufidat_cast))) {
+  try(merge(impute_preds, CustomImpute(rufidat_cast,i,maxgap=30), by='Date'))
+}
+impute_preds <- c('Date', colnames(impute_preds)[2:(ncol(impute_preds))])
 
-ggplot(rufidat_castsub, aes(x=Date, y=get(colnames(rufidat_castsub)[sn])))+
-  geom_point(data=df_pred,aes(y=pred), color='red') + 
-  geom_point(color='black') +
-  scale_x_date(limits=as.Date(c('1965-01-01','1975-01-01')))
+
+ggplot(tscastsub, aes(x=Date, y=get(colnames(tscastsub)[sn])))+
+  geom_point(data=try,aes(y=pred), color='red') + 
+  geom_point(color='black') 
 
 
 # #Try imputeTS package Kalman filter
-# sn='1KA8A'
-# mindate <- rufidat_castsub[min(which(!is.na(rufidat_castsub[,sn]))),'Date']
-# x <- na.kalman(rufidat_castsub[rufidat_castsub$Date>mindate,sn], model = "auto.arima")
-# rufidat_castsub[rufidat_castsub$Date>mindate,'pred1KA8A'] <- x
-# ggplot(rufidat_castsub[rufidat_castsub$Date>mindate,], aes(x=Date, y=get(sn)))+
-#   geom_point(aes(y=pred1KA8A), color='red') +
-#   geom_point(color='black')+
-#   scale_x_date(limits=as.Date(c('1965-01-01','1975-01-01')))
+sn='1KA8A'
+mindate <- rufidat_castsub[min(which(!is.na(rufidat_castsub[,sn]))),'Date']
+x <- na.kalman(rufidat_castsub[rufidat_castsub$Date>mindate,sn], model = "auto.arima")
+rufidat_castsub[rufidat_castsub$Date>mindate,'pred1KA8A'] <- x
+ggplot(rufidat_castsub[rufidat_castsub$Date>mindate,], aes(x=Date, y=get(sn)))+
+  geom_point(aes(y=pred1KA8A), color='red') +
+  geom_point(color='black')+
+  scale_x_date(limits=as.Date(c('1965-01-01','1975-01-01')))
