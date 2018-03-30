@@ -6,7 +6,7 @@
 #Authors: Mathis L. Messager and Dr. Julian D. Olden
 #Contact info: messamat@uw.edu
 #Date created: 03/26/2018
-#Date last updated: 03/28/2018
+#Date last updated: 03/29/2018
 
 #Purpose: further assess flow record and filter out streamgages based on length of record, gaps, overlap, and non-stationarity
 #N.B: here, filtering of gages based on environmental disturbance and non-stationarity is subsequent to analysis based on flow record length and overlap
@@ -22,10 +22,14 @@ library(lemon)
 library(foreign)
 library(forecast)
 library(imputeTS)
+library(scales) # to access break formatting functions
+library(grid)
+library(gridExtra)
+library(cowplot)
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
 datadir = file.path(getwd(),paste('rufiji_hydrodatainspect','20180326',sep='_')) #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
-outdir=file.path(getwd(),paste('rufiji_hydrodatafilter',as.character(format('20180327','%Y%m%d')),sep='_'))
+outdir=file.path(getwd(),'rufiji_hydrodatafilter_20180327')
 if (dir.exists(outdir)) {
   print('Directory already exists')
 } else {
@@ -35,8 +39,10 @@ if (dir.exists(outdir)) {
 
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
 rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
+rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltab.dbf'))
 gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
+
 
 ##########################################
 #BUild summary tables
@@ -90,7 +96,7 @@ colnames(rufidat_gapyear) <- c('ID',paste('gagecount_gap', seq(0.5,0,-0.05),sep=
 rufidat_gapplot <- ldply(seq(5,50,1), function(y) {adply(rufidat_gapyear[,2:ncol(rufidat_gapyear)], 2, function(x) length(which(x>y)))})
 rufidat_gapplot$minyr <- sort(rep(seq(5,50,1), ncol(rufidat_gapyear[,2:ncol(rufidat_gapyear)])))
 rufidat_gapplot$maxgap <- as.numeric(substr(rufidat_gapplot$X1,15,18))
-  
+
 gapplot <- ggplot(rufidat_gapplot, aes(x=minyr, y=V1, color=as.factor(maxgap))) + 
   scale_x_continuous(name='Record length (years)', breaks=seq(5,50,5), expand=c(0,0)) +
   scale_y_continuous(name='Number of gages', limits=c(0,35), breaks=seq(0,35,5),expand=c(0,0))+
@@ -125,11 +131,11 @@ overlapplot <- ldply(seq(5,35,1), function(a) {
   ldply(seq(1955,2017,1), function(b) {
     ldply(seq(1,a)/a, function(c) {
       ldply(seq(5,50), function(d) {
-      tryCatch(overlap_comp(period_len=a, cyr=b, completeness=c, minyr=d), error=function(e) NULL)
-        })
+        tryCatch(overlap_comp(period_len=a, cyr=b, completeness=c, minyr=d), error=function(e) NULL)
       })
     })
   })
+})
 colnames(overlapplot) <- c("period_len","cyr","completeness","minyr","count")
 write.csv(overlapplot, file.path(outdir,'rufidat_overlapplot.csv'),row.names = F)
 #Get maximum number of overlapping gages for each percentage of overlap,length of overlap period, and total length of record 
@@ -156,6 +162,7 @@ dev.off()
 tryoverlap<-overlapplot[period_len>=15 & minyr>=15 & completeness>=0.3 & count>=15 & cyr>=2000 & cyr<=2018-15]
 print(tryoverlap)
 
+################################################
 #Visualize correlation among gages
 over5yr <- as.character(rufidat_gapyear[rufidat_gapyear$gagecount_gap_0.1>10,'ID']) #Only keep gages with at least 5 years of data (as otherwise correlation does not run)
 rufidat_clean$Flowlog <- log(rufidat_clean$Flow+0.01)
@@ -163,6 +170,132 @@ rufidat_cast <- dcast(rufidat_clean[rufidat_clean$ID %in% over5yr,], Date~ID, va
 #png(file.path(outdir,'hydropairs.png'),width=40, height=40,units='in',res=300)
 #hydropairs(rufidat_cast, dec=3, use="pairwise.complete.obs", method="pearson")
 #dev.off()
+
+#####################################################################
+#Assess representativity of gages regarding environmental variables
+#####################################################################
+
+################################
+#With individual variable plots
+theme_env <- function () { 
+  theme_bw(base_size=14) %+replace% 
+    theme(
+      panel.background  = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      axis.line.x=element_line(),
+      axis.line.y=element_line()
+    )
+}
+theme_envnoy <- function () { 
+  theme_bw(base_size=14) %+replace% 
+    theme(
+      panel.background  = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      axis.line.x=element_line(),
+      axis.line.y=element_line(),
+      axis.title.y=element_blank()
+    )
+}
+
+envplot_area <- ggplot(rufienv, aes(x=WsArea)) + 
+  geom_vline(xintercept=gagesenvrec$WsArea, color='red',alpha=0.4, size=0.75) +
+  geom_histogram(bins=50, fill='#878787', alpha=0.5) + 
+  scale_x_log10(name=expression('Watershed area'~(km^3)),
+                breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)),
+                expand=c(0,0)) +
+  scale_y_continuous(name='Number of reaches', expand=c(0,0)) + 
+  theme_env()
+#envplot_area
+envplot_elv <- ggplot(rufienv, aes(x=ReaElvAvg)) + 
+  geom_vline(xintercept=gagesenvrec$ReaElvAvg, color='red',alpha=0.4, size=0.75) +
+  geom_histogram(bins=50,fill='#fdbf6f', alpha=0.65) + 
+  scale_x_continuous(name=expression('River reach average elevation (m)'),
+                     expand=c(0,0)) +
+  scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
+  theme_envnoy()
+#envplot_elv
+envplot_preci <- ggplot(rufienv, aes(x=WsBio12Av)) + 
+  geom_vline(xintercept=gagesenvrec$WsBio12Av, color='red',alpha=0.4, size=0.75) +
+  geom_histogram(bins=50,fill='#1f78b4', alpha=0.4) + 
+  scale_x_continuous(name=expression('Upstream mean annual precipitation (mm)'),
+                     expand=c(0,0)) +
+  scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
+  theme(axis.title.y=element_blank()) +
+  theme_envnoy()
+#envplot_preci
+
+
+envplot_watext <- ggplot(rufienv, aes(x=100*CatWatExt)) + 
+  geom_vline(xintercept=100*gagesenvrec$CatWatExt, color='red',alpha=0.4, size=0.75) +
+  geom_histogram(bins=50,fill='#35978f', alpha=0.4) + 
+  scale_x_continuous(name=expression('River catchment maximum water extent 1984-2015 (% of catchment area)'),
+                     expand=c(0,0)) +
+  scale_y_continuous(trans='sqrt',name='Number of reaches',expand=c(0,0)) + 
+  theme_env()
+#envplot_watext
+rufienv$CatGeolMaj <- factor(rufienv$CatGeolMaj, levels = unique(rufienv$CatGeolMaj[order(as.numeric(as.character(rufienv$CatGeolMaj)))]))
+envplot_geol <-  ggplot(rufienv, aes(x=CatGeolMaj)) + 
+  geom_bar(fill='#8c510a', alpha=0.4, stat='count') +
+  geom_bar(data=gagesenvrec, color='red',fill='white',alpha=0.4, size=0.75) +
+  scale_x_discrete(name=expression('Main catchment lithology')) +
+  scale_y_continuous(trans='log10',name='Number of reaches') + 
+  theme_envnoy()
+#envplot_geol
+envplot_pop <- ggplot(rufienv, aes(x=CatPopDen)) + 
+  geom_vline(xintercept=gagesenvrec$CatPopDen, color='red',alpha=0.4, size=0.75) +
+  geom_histogram(bins=50,fill='#4d9221', alpha=0.4) + 
+  scale_x_log10(name=expression('River catchment population density'~(persons/km^2)),
+                breaks=c(1,5,10,50,100,500,1000,5000),
+                expand=c(0,0)) +
+  scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
+  theme_envnoy()
+#envplot_pop
+
+
+envplot_forlos <- ggplot(rufienv, aes(x=100*WsFLosSum_)) + 
+  geom_vline(xintercept=100*gagesenvrec$WsFLosSum_, color='red',alpha=0.4, size=0.75) +
+  geom_histogram(bins=50,fill='#bf812d', alpha=0.6) + 
+  scale_x_sqrt(name=expression('Upstream forest loss (% of watershed area)'),
+               breaks=c(0,1,5,10,25,50,75,100),
+               expand=c(0,0)) +
+  scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
+  theme_env()
+#envplot_forlos
+envplot_urb <- ggplot(rufienv, aes(x=100*LCSum_89)) + 
+  geom_vline(xintercept=100*gagesenvrec$LCSum_89, color='red',alpha=0.4, size=0.75) +
+  geom_histogram(bins=50,fill='#cab2d6', alpha=0.4) + 
+  scale_x_continuous(trans='log10',
+                     name='Upstream urban area (% of watershed area)',
+                     breaks = c(0.001,0.01,0.1,1,10),
+                     labels= c(0.001,0.01,0.1,1,10),
+                     expand=c(0,0)) +
+  scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
+  theme_envnoy()
+#envplot_urb
+envplot_resind <- ggplot(rufienv, aes(x=WsResInd)) + 
+  geom_vline(xintercept=gagesenvrec$WsResInd, color='red',alpha=0.4, size=0.75) +
+  geom_histogram(bins=50,fill='#de77ae', alpha=0.4) + 
+  scale_x_continuous(name=expression('Proportion of watershed draining from a reservoir (%)'),
+                     expand=c(0,0)) +
+  scale_y_log10(name='Number of reaches',expand=c(0,0),
+                breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) + 
+  theme_envnoy()
+#envplot_resind
+#plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
+
+png(file.path(outdir,'gage_env.png'),width=20, height=12,units='in',res=300)
+plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
+dev.off()
+
+################################
+#In multidimensional environment
+
+
+
 
 
 #rufidat_overlapplot <- ldply(seq(5,50,1), function(y) {
