@@ -19,13 +19,17 @@ library(hydroTSM)
 library(reshape)
 library(plyr)
 library(lemon)
-library(foreign)
-library(forecast)
-library(imputeTS)
+library(foreign) #For impot/export of dbf
 library(scales) # to access break formatting functions
 library(grid)
-library(gridExtra)
-library(cowplot)
+library(gridExtra) #For multi plot export
+library(cowplot) #For multi plot alignment
+library(stringr) #For string matching
+library(pastecs) #For data preparation
+library(vegan) #For data preparation
+library(FD) #For gower's dist
+library(fifer) #for stratified sampling
+source("F:/Tanzania/Tanzania/bin/outside_src/Biostats.R")
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
 datadir = file.path(getwd(),paste('rufiji_hydrodatainspect','20180326',sep='_')) #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
@@ -38,11 +42,22 @@ if (dir.exists(outdir)) {
 }
 
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
-rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
-rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltab.dbf'))
-gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
-gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
 
+#rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltab.dbf'))
+#numcol <- colnames(rufienv)[which(sapply(rufienv, is.numeric))]
+#maxcol <-adply(rufienv[,numcol],2,max)
+#incol <- colnames(rufienv)[!(colnames(rufienv) %in% maxcol[maxcol$V1==0,'X1'])]
+#rufienv <- rufienv[,incol] #Take out all 0 columns
+#write.dbf(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
+rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
+
+#gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
+#incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% maxcol[maxcol$V1==0,'X1'])] #Take out columns with only 0 values
+#gagesenv <- gagesenv[,incol] #Take out all 0 columns
+#write.dbf(gagesenv, file.path(getwd(),'gages_netjoinclean.dbf'))
+gagesenv <- read.dbf(file.path(getwd(),'gages_netjoinclean.dbf'))
+gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
+#write.dbf(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180330.dbf'))
 
 ##########################################
 #BUild summary tables
@@ -60,9 +75,9 @@ record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
   scale_x_date(date_breaks ="5 years") +
   scale_colour_distiller(name='Number of gages',palette='Spectral') +
   theme_bw()
-png(file.path(outdir,'record_overview.png'),width = 20, height=12,units='in',res=300)
-print(record_overview)
-dev.off()
+# png(file.path(outdir,'record_overview.png'),width = 20, height=12,units='in',res=300)
+# print(record_overview)
+# dev.off()
 
 #Compute length of gap between current daily record and previous record both within and between years for each date and gage
 rufidat_dt[, prevdate := ifelse(shift(ID, 1L, type="lag")==ID,shift(as.character(Date), 1L, type="lag"), NA)]
@@ -117,27 +132,33 @@ max_yrgap <- 0.1
 dtoverlap <-rufidat_gapsummary[rufidat_gapsummary$gap_per<=0.1,]
 dtoverlap <- merge(dtoverlap, rufidat_gapyear[,c("ID","gagecount_gap_0.1")], by="ID")
 
-#period_len=5
-#cyr = 1964
-#completeness=1
-#minyr=10
+period_len=5
+cyr = 1964
+completeness=1
+minyr=10
 #Compute for a given year, length of period, degree of overlap, and minimum length of total record, the number of gages
-overlap_comp <- function(period_len, cyr, completeness, minyr) {
+overlap_comp <- function(dtoverlap, period_len, cyr, completeness, minyr) {
   return(c(period_len, cyr, completeness, minyr,
            length(which(dtoverlap[dtoverlap$gagecount_gap_0.1>=minyr & dtoverlap$year>=cyr & dtoverlap$year<cyr+period_len,.N/period_len,.(ID)][,2]>=completeness)))
   )
 }
+
+dtoverlap[dtoverlap$gagecount_gap_0.1>=minyr & dtoverlap$year>=cyr & dtoverlap$year<cyr+period_len,.N/period_len,.(ID)]
+which(dtoverlap[dtoverlap$gagecount_gap_0.1>=minyr & dtoverlap$year>=cyr & dtoverlap$year<cyr+period_len,.N/period_len,.(ID)][,2]>=completeness)
+
+
 overlapplot <- ldply(seq(5,35,1), function(a) {
   ldply(seq(1955,2017,1), function(b) {
     ldply(seq(1,a)/a, function(c) {
       ldply(seq(5,50), function(d) {
-        tryCatch(overlap_comp(period_len=a, cyr=b, completeness=c, minyr=d), error=function(e) NULL)
+        tryCatch(overlap_comp(dtoverlap, period_len=a, cyr=b, completeness=c, minyr=d), error=function(e) NULL)
       })
     })
   })
 })
 colnames(overlapplot) <- c("period_len","cyr","completeness","minyr","count")
 write.csv(overlapplot, file.path(outdir,'rufidat_overlapplot.csv'),row.names = F)
+overlapplot <- read.csv(file.path(outdir,'rufidat_overlapplot.csv'))
 #Get maximum number of overlapping gages for each percentage of overlap,length of overlap period, and total length of record 
 overlapplot <- as.data.table(overlapplot)
 overlapplotmax <- overlapplot[, .SD[which.max(count)], .(period_len, completeness, minyr)]
@@ -159,7 +180,7 @@ reposition_legend(overlapplot_out, 'left', panel='panel-3-3')
 dev.off()
 
 #Check best date of period based on a set of requirements
-tryoverlap<-overlapplot[period_len>=15 & minyr>=15 & completeness>=0.3 & count>=15 & cyr>=2000 & cyr<=2018-15]
+tryoverlap<-overlapplot[period_len>=15 & minyr>=20 & completeness>=0.3 & count>=15 & cyr>=2001 & cyr<=2018-15]
 print(tryoverlap)
 
 ################################################
@@ -291,20 +312,86 @@ png(file.path(outdir,'gage_env.png'),width=20, height=12,units='in',res=300)
 plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
 dev.off()
 
-################################
+#####################################################
 #In multidimensional environment
+#######################################################
+#Make subset of data
+colnames(rufienv)
+outcols <- c(1:4,6,7,9,45:70,92:112, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
+                                                                    'WsPAPer','WsDamDen','WsGeolMaj','WsLCMaj','ReaElvMin',
+                                                                    'ReaElvMax','SUM_LENGTH_GEO','Shape_Leng') |
+                                             !is.na(str_match(colnames(rufienv),'DirSum*'))))
+rufienvsub <- rufienv[,-outcols]
+rufienvsub$ReaDirMaj <- as.factor(rufienvsub$ReaDirMaj)
+colnames(rufienvsub)
+envsubcat <- rufienvsub[,c(1:55,157:161)]
+envsubws <-rufienvsub[,-c(1:55)]
+
+#Data transformation
+#Transform catchments
+str(envsubcat)
+colnames(envsubcat)
+factcol <- c(1,2,54,55,57)
+#hist.plots(envsubcat[,-factcol]) #Inspect data
+logcols <- c('CatPopDen','ReaSloAvg')
+envsubcat[,logcols] <- data.trans(data.frame(envsubcat[,logcols]), method = 'log', plot = F)
+asincols <- c('CatFLosSum', paste('LCSum',c(1,2,3,4,5,6,7,8,10),sep='_'),'CatWatExt','CatResInd','CatLakInd')
+envsubcat[,asincols] <- data.trans(envsubcat[,asincols], method = 'asin', plot = F)
+sqrtcols <- c('CatAIAvg', 'CatBio14Av','CatBio17Av','CatBio19Av','CatElvMax', 'CatElvAvg','CatSloAvg','CatSloStd','CatLen_1','CatPAPer',
+              'CatRoadDen','CatWatcha','CatMineDen','CatWatOcc','ReaPAPer','ReaElvAvg')
+envsubcat[,sqrtcols] <- data.trans(envsubcat[,sqrtcols], method = 'power',exp=.5, plot = F)
+#Transform watersheds
+#hist.plots(envsubws) #Inspect data
+
+#Then standardize to mean of 0 and unit variance
+envsubcat_std <- envsubcat[,-factcol]
+envsubcat_std <- cbind(data.stand(envsubcat_std, method = "standardize", margin = "column", plot = F),
+                       envsubcat[,factcol])
+#Transfer first column to row name
+rownames(envsubcat_std) <- envsubcat_std$GridID
+envsubcat_std <- envsubcat_std[,-which(colnames(envsubcat_std)=='GridID')]
+#Establish variable weights
+#envar <- colnames(rufienvsub)
+#weight_gow <- c(0.5, 0.5, 1,1,1, 0.5, 0.5, 0.2, 0.2, 0.2, 0.2, 0.2, 0.333, 0.333, 0.333)
+
+#Computer Gower's dissimilarity on full fish dataset
+set.seed(1)
+envsubcat_samp<-stratified(envsubcat_std, "ReaOrd", 0.1, select=NULL)
+rufi_gowdis <- gowdis(envsubcat_samp, w=rep(1,ncol(envsubcat_samp)), asym.bin = NULL)
+attributes(rufi_gowdis)
+#Convert gowdis output to matrix
+rufi_gowdis<- as.matrix(rufi_gowdis)
+#Run PCoA without a constant added using the stats package
+rufi_pcoa <- cmdscale(rufi_gowdis, k = 3, eig = T, add = F)
+#Check eigenvalues
+rufi_pcoa$eig
+rufi_pcoa$GOF
+
+#rufi_pcoa_eucldist <- vegdist(rufi_pcoa$points, method = "euclidean")
+#Shepard <- Shepard_diy(rufi_gowdis, rufi_pcoa_eucldist)
+#Calculate PC loadings using correlation analysis - misses 124 species, so not necessarily that representative
+vec_tr <- envfit(fish_pcoa,  Fish_traits_select, perm = 1000, na.rm = T)
+arrows <- as.data.frame(vec_tr$vectors$arrows)
+factors <- as.data.frame(vec_tr$vectors$factors)
+
+#Visualize scores
+pcoa_scores <- as.data.frame(fish_pcoa$points)
+pcoa_scores$spe <- rownames(pcoa_scores)
+colnames(pcoa_scores) <- c("PC1", "PC2")
+ggplot(pcoa_scores, aes(x = PC1, y = PC2, label = rownames(pcoa_scores))) + geom_label() +
+  geom_segment(data = arrows, aes(x = rep(0, 13), y = rep(0, 13), xend = Dim1 , yend = Dim2, label = rownames(arrows))) + 
+  geom_text(aes(x = Dim1, y = Dim2, label = rownames(arrows)), data = arrows, color = "red") +
+  
+  
+  ggplot(arrows) + geom_segment(aes(x = rep(0, 13), y = rep(0, 13), xend = Dim1 , yend = Dim2))
 
 
+##########################################
+#To do:
+#Evaluate consistency of discharge with drainage area and precipitation + HydroSHEDS modeled data
 
-
-
+###########################################
+#Extra: 
 #rufidat_overlapplot <- ldply(seq(5,50,1), function(y) {
 #  rufidat_dtgap[ID %in% as.character(rufidat_gapyear[rufidat_gapyear$gagecount_gap_0.1>y,'ID']),list(length(unique(ID)), minyr=y), .(Date)]
 #})
-
-
-#####
-#To do:
-#Based on these requirements, assess number of gages based on non-stationarity
-#Create plots of data showing deleted and interpolated data
-#Evaluate consistency of discharge with drainage area and precipitation + HydroSHEDS modeled data
