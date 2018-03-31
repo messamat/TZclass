@@ -6,7 +6,7 @@
 #Authors: Mathis L. Messager and Dr. Julian D. Olden
 #Contact info: messamat@uw.edu
 #Date created: 03/22/2018
-#Date last updated: 03/26/2018
+#Date last updated: 03/31/2018
 
 #Purpose: visualize, assess quality, and perform preliminary clean-up of hydrological data in the Rufiji river basin, provided by CDMSmith Zach T. Eichenwald
 
@@ -81,7 +81,7 @@ colnames(rufidat_screenform) <- colnames(test)
 which(duplicated(rufidat_screenform[,c('Date','ID')]))
 
 #Inspect data prior to cleaning
-outdir=file.path(getwd(),paste('rufiji_hydrodatainspect',as.character(format(Sys.Date(),'%Y%m%d')),sep='_'))
+outdir=file.path(getwd(),'rufiji_hydrodatainspect_20180326')
 if (dir.exists(outdir)) {
   print('Directory already exists')
 } else {
@@ -183,12 +183,12 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA41' & rufidat_clean$Date>
 
 ###1KA66	MLOWO AT ILONGO: anomalous period of constant values in late 2005-early 2006 + wonky 1993 data
 # It in fact seems like the entire rating curve is off. 1KA51A which is right upstream has a discharge >20 times smaller even after cleaning
+g1KA66<-rufidat_clean[rufidat_clean$ID=='1KA66',]
 mean(g1KA66$Flow)
 g1KA51A <-rufidat_clean[rufidat_clean$ID=='1KA51A',]
 mean(g1KA51A$Flow)
 #Gage has a watershed of 82km2, which means that if the mean annual discharge were to be 16cms, then it would require 6000mm of precipitation
 #to fall on the watershed and 100% of it to accumulate at that location — very unlikely.
-g1KA66<-rufidat_clean[rufidat_clean$ID=='1KA66',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA66' & (rufidat_clean$Date<'1994-01-01' | 
                                                                 (rufidat_clean$Date>'2005-07-23' & rufidat_clean$Date<'2006-02-04') |
                                                                 rufidat_clean$Flow>1000)),] 
@@ -207,8 +207,8 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB4A' & rufidat_clean$Date 
 #                                       (also happen from one day to the next and encompass exactly one month, so remove)
 g1KB8B<-rufidat_clean[rufidat_clean$ID=='1KB8B',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB8B' & ((rufidat_clean$Date>'1963-12-01' & rufidat_clean$Date<'1964-01-30') | 
-                                                                (rufidat_clean$Date>'1976-02-01' & rufidat_clean$Date<'1976-02-29'))),] 
-
+                                                                (rufidat_clean$Date>'1976-02-01' & rufidat_clean$Date<'1976-02-29') |
+                                                                rufidat_clean$Flow<7)),] 
 ###1KB9	MNYERA RIVER AT TAWETA: long periods of constant values
 g1KB9<-rufidat_clean[rufidat_clean$ID=='1KB9',]
 g1KB9_delist <- remove_constant(g1KB9)
