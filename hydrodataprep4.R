@@ -120,6 +120,8 @@ impute_preds <- cbind(impute_preds,rufidat_cast[,which(!(colnames(rufidat_cast) 
 
 #Use forecast na.interp for two gages that for which interpolation didn't work well
 #Try out forecast package na.interp for seasonal series
+
+
 CustomImpute_nainterp <- function(tscast, sn, maxgap,pplot) {
   if (sn > 1) {
     mindate <- tscast[min(which(!is.na(tscast[,sn]))),'Date']
@@ -147,10 +149,14 @@ CustomImpute_nainterp <- function(tscast, sn, maxgap,pplot) {
     pred_try
   }
 }
-impute_preds[id.na,sn] <- CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KA15A'),37,pplot=T)[id.na,'pred']
-impute_preds[id.na,sn] <- CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KB14A'),37,pplot=T)[id.na,'pred']
+int1KA15A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KA15A'),37,pplot=T)
+impute_preds[impute_preds$Date>=min(int1KA15A$Date) & impute_preds$Date<=max(int1KA15A$Date),
+             which(colnames(impute_preds)=='1KA15A')] <- int1KA15A$pred
+int1KB14A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KB14A'),37,pplot=T)
+impute_preds[impute_preds$Date>=min(int1KB14A$Date) & impute_preds$Date<=max(int1KB14A$Date),
+             which(colnames(impute_preds)=='1KB14A')] <- int1KB14A$pred
 
-write.csv(impute_preds, file.path(outdir, 'rufidat_interp.csv'), row.names=F)
+#write.csv(impute_preds, file.path(outdir, 'rufidat_interp.csv'), row.names=F)
 impute_preds <- read.csv(file.path('rufiji_hydrodataimpute_20180329', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
 colnames(impute_preds)[2:(ncol(impute_preds))] <- substr(colnames(impute_preds),2,10)[2:(ncol(impute_preds))]
 
@@ -168,7 +174,7 @@ for (gage in unique(predsmelt$ID)) {
   #Generate FlowScreen time series
   gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
   #Compute and output flowScreen metrics and plots
-  try({
+  tryCatch({
     res <- metrics.all(gts)
     ginfo <- data.frame(StationID=genv$RGS_No, StnName=gname, ProvState='Rufiji Basin',Country='Tanzania',
                         Lat=genv$POINT_Y, Long=genv$POINT_X, Area=genv$WsArea, RHN='RBWB')
@@ -181,22 +187,24 @@ for (gage in unique(predsmelt$ID)) {
     png(file.path(outdir,paste(gage,'screenh.png',sep="_")),width = 20, height=12,units='in',res=300)
     screen.summary(res, type="h", StnInfo=ginfo)
     dev.off()
+  }, finally = {
+    dev.off()
   })
   #Make raw time series plot
   rawsgplot <-ggplot(gts, aes(x=Date, y=Flow)) +
-    geom_rect(aes(xmin=as.Date('2001-10-01'), xmax=as.Date('2016-10-01'), ymin=min(gts$Flow), ymax=max(gts$Flow)), fill='#ffeda0', alpha=0.5) +
-    geom_point(color='#bf812d', size=1.5) + 
-    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], color='#045a8d', size=1.5) +
-    #geom_point(data=rufidat_clean[rufidat_clean$ID==gage & rufidat_clean$Date>'2001-10-01',], color='#4393c3', size=1.5) +
-    geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,],aes(x=Date, y=Flow+0.01), color='#e31a1c', size=1.5) +
-    scale_y_sqrt()+
+    #geom_rect(aes(xmin=as.Date('2001-10-01'), xmax=as.Date('2016-10-01'), ymin=min(gts$Flow-1), ymax=max(gts$Flow+1)), fill='#ffffbf', alpha=0.1) +
+    geom_point(color='#bf812d', size=1.5)+ 
+    geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,],aes(x=Date, y=Flow), color='#e31a1c', size=1.5) +
+    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], color='#9ecae1', size=1.5) +
+    geom_point(data=rufidat_clean[rufidat_clean$ID==gage & rufidat_clean$Date>'2001-10-01',], color='#045a8d', size=1.5) +
+    scale_y_sqrt(expand=c(0,0))+
     scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
     labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - ")) +
     theme_bw() + 
     theme(axis.text.x = element_text(angle = 45, hjust=1))
-  png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
+  #png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
   print(rawsgplot)
-  dev.off()
+  #dev.off()
 }
 
 ######################################## EXTRA ######################################################
