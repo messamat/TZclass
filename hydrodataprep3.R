@@ -15,6 +15,7 @@ library(data.table)
 library(FlowScreen) #to inspect data
 library(waterData) #to import USGS data
 library(prospectr) #for sg derivative
+library(dplyr)
 library(compare)
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
 datadir = file.path(getwd(),paste('rufiji_hydrodataraw','20180324',sep='_')) #UPDATE
@@ -129,14 +130,13 @@ for (gage in unique(rufidat_screenform$ID)) {
   dev.off()
 }
 
-####################################################################################
-# Clean out obviously spurious data based on preliminary observation
-####################################################################################
+#################################Clean out obviously spurious data ###########################
 rufidat_clean <- rufidat_screenform
 ###1KA2A	LITTLE RUAHA AT NDIUKA: period 1995 to late 2011 seems suspect: remove
 #                                 Lots of missing data, appears like low-flow part of the year was cut-off or everything was shifted up?
 g1KA2A<-rufidat_clean[rufidat_clean$ID=='1KA2A',]
-rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>'1994-12-19' & rufidat_clean$Date<'2001-09-05'),] 
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>='1994-12-19' & rufidat_clean$Date<'2001-09-05'),] 
+
 
 ###1KA4A	GREAT RUAHA AT MSOSA: seems like stage measurements corresponding to a discharge right over 100cms are spurious as they plateau, 
 #                               but not picked up by derivative. Will be kept (seem like the discharge at which there are spot measurements).
@@ -163,7 +163,6 @@ g1KA22<-rufidat_clean[rufidat_clean$ID=='1KA22',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA22' & rufidat_clean$Date<'1957-05-27'),]
 
 ###1KA32A	LITTLE RUAHA AT MAKALALA: remove all 0 values prior to 1970
-rufidat_deleted <- rbind(rufidat_deleted,rufidat_clean[(rufidat_clean$ID=='1KA32A' & rufidat_clean$Date<'1970-01-01' & rufidat_clean$Flow==0),]) 
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA32A' & rufidat_clean$Date<'1970-01-01' & rufidat_clean$Flow==0),]
 
 ###1KA37A	LUKOSI AT MTANDIKA: look wonky prior to 1968, also appears to be a flow duration curve break around 10 cms?
@@ -183,10 +182,16 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA41' & rufidat_clean$Date>
 #ZTE: "No RC info for prior to 1994. Suspect poor records prior to 1990 when new rating curve (and perhaps station) were established. Likely decent records post 1990."
 
 ###1KA66	MLOWO AT ILONGO: anomalous period of constant values in late 2005-early 2006 + wonky 1993 data
+# It in fact seems like the entire rating curve is off. 1KA51A which is right upstream has a discharge >20 times smaller even after cleaning
+mean(g1KA66$Flow)
+g1KA51A <-rufidat_clean[rufidat_clean$ID=='1KA51A',]
+mean(g1KA51A$Flow)
+#Gage has a watershed of 82km2, which means that if the mean annual discharge were to be 16cms, then it would require 6000mm of precipitation
+#to fall on the watershed and 100% of it to accumulate at that location — very unlikely.
 g1KA66<-rufidat_clean[rufidat_clean$ID=='1KA66',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA66' & (rufidat_clean$Date<'1994-01-01' | 
-                                                                (rufidat_clean$Date>'2005-07-23' & rufidat_clean$Date<'2006-02-04'))),] 
-
+                                                                (rufidat_clean$Date>'2005-07-23' & rufidat_clean$Date<'2006-02-04') |
+                                                                rufidat_clean$Flow>1000)),] 
 ###1KA71	GREAT RUAHA AT NYALUHANGA: odd systematic break on descending limb in 2003, 2004, and 2005, but kept.
 
 ###1KB33	KIHANSI BELOW KIHANSI DAM: only contains -999: remove entirely
@@ -232,14 +237,18 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB18B' & (rufidat_clean$Flo
 g1KB19A<-rufidat_clean[rufidat_clean$ID=='1KB19A',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow <=0.1812),] 
 
-#################################
-#Create dataset of deleted values
+###1KB19A	HAGAFIRO AT HAGAFIRO: spurious reccurring constant value
+g1KB19A<-rufidat_clean[rufidat_clean$ID=='1KB19A',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow <=0.1812),] 
+
+###1KB24A SANJE AT SANJE: Very high peak at the beginning of the record. Way outside of the rating curve's range
+#(max spot measurement at 6cms, here flood at nearly 2500 cms, corresponding to 18m stage increase — implausible)
+g1KB24<- rufidat_clean[rufidat_clean$ID=='1KB24',]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB24' & rufidat_clean$Date<'1965-01-01'& rufidat_clean$Flow>50),] 
+
+#################################Create dataset of deleted values###########################
 rufidat_deleted <- anti_join(rufidat_screenform, rufidat_clean, by=c("ID","Date"))
 
-########################################
-#Export data to directory
-########################################
+#################################Export data to directory########################################
 write.csv(rufidat_clean, file.path(outdir,'rufidat_clean.csv'),row.names = F)
 write.csv(rufidat_deleted, file.path(outdir,'rufidat_deleted.csv'),row.names = F)
-
-
