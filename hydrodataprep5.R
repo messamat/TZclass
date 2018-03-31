@@ -68,6 +68,7 @@ rufidat_dt <- data.table(rufidat_clean)
 rufidat_datesummary <- rufidat_dt[,list(length(unique(ID))), .(Date)] #Compute number of gages with data for each date
 rufidat_clean$ID <- factor(rufidat_clean$ID, levels = unique(rufidat_clean$ID[order(rufidat_clean$Date)]))
 
+#Make sure that the legend gets to the maximum
 record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
   geom_point(size=2) +
   geom_bar(data=rufidat_datesummary, aes(x=Date,y='1KB36',color=V1), stat='identity') +
