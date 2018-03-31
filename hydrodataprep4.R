@@ -19,10 +19,11 @@ library(lemon)
 library(foreign)
 library(forecast)
 library(imputeTS)
+
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
 datadir = file.path(getwd(),paste('rufiji_hydrodatainspect','20180326',sep='_')) #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
-outdir=file.path(getwd(),paste('rufiji_hydrodataimpute',as.character(format(Sys.Date(),'%Y%m%d')),sep='_'))
+outdir=file.path(getwd(),'rufiji_hydrodataimpute_20180329')
 if (dir.exists(outdir)) {
   print('Directory already exists')
 } else {
@@ -65,9 +66,9 @@ na.lomb <- function(x) {
 #sn: column of the time series to be infilled
 #maxgap: maximum gap length to be imputed
 #Example values to test function:
-    #tscast=rufidat_cast
-    #sn=2
-    #maxgap=30
+    # tscast=rufidat_cast
+    # sn=3
+    # maxgap=30
 CustomImpute <- function(tscast, sn, maxgap) {
   if (sn > 1) {
     name<- colnames(tscast)[sn]
@@ -107,17 +108,51 @@ CustomImpute <- function(tscast, sn, maxgap) {
     warning('sn must be >1 as 1st column must be "Date"')
   }
 }
-
 #Fill in every gauge
 impute_preds <- data.frame(Date=rufidat_cast[,"Date"])
 for (i in 2:(ncol(rufidat_cast))) {
   try({
-  impute_preds<-merge(impute_preds, CustomImpute(rufidat_cast,i,maxgap=30), by='Date', all.x=T)
+  impute_preds<-merge(impute_preds, CustomImpute(rufidat_cast,i,maxgap=37), by='Date', all.x=T)
   })
 }
-#Append the two gauges for which there was not enough info
+#Append the two gauges for which there was not enough info 1KA4A and 1KA33B
 impute_preds <- cbind(impute_preds,rufidat_cast[,which(!(colnames(rufidat_cast) %in% colnames(impute_preds)))])
+
+#Use forecast na.interp for two gages that for which interpolation didn't work well
+#Try out forecast package na.interp for seasonal series
+CustomImpute_nainterp <- function(tscast, sn, maxgap,pplot) {
+  if (sn > 1) {
+    mindate <- tscast[min(which(!is.na(tscast[,sn]))),'Date']
+    maxdate <- tscast[max(which(!is.na(tscast[,sn]))),'Date']
+    tscastsub <- tscast[tscast$Date>mindate & tscast$Date<maxdate,]
+    tscastsub$prevdate <- tscastsub[na.lomf(tscastsub[,sn]),'Date']
+    tscastsub$nextdate <- tscastsub[na.lomb(tscastsub[,sn]),'Date']
+    tscastsub$gap <- as.numeric(as.Date(tscastsub$nextdate)-as.Date(tscastsub$prevdate))
+    tscastsub <- as.data.frame(tscastsub)
+    id.na <- which((tscastsub$gap<=maxgap &
+                      is.na(tscastsub[,sn])))
+    bc <- BoxCox.lambda(tscastsub[,sn]+0.01,method='loglik',lower=0)
+    pred_try <- data.frame(pred=na.interp(ts(tscastsub[,sn],frequency=365)), lambda=0)
+    pred_try[pred_try$pred<min(tscastsub[,sn],na.rm=T),'pred'] <- min(tscastsub[,sn],na.rm=T) #if interpolated value is outside bound, bound it
+    pred_try[pred_try$pred>max(tscastsub[,sn],na.rm=T),'pred'] <- max(tscastsub[,sn],na.rm=T)
+    pred_try$Date <- tscastsub[,'Date']
+    if (pplot==T){
+      print(ggplot(tscastsub, aes(x=Date, y=get(colnames(tscastsub)[sn])))+
+              geom_point(data=pred_try[id.na,],aes(y=pred), color='red') +
+              geom_point(color='black')+
+              scale_y_sqrt()+
+              scale_x_date(limits=c(as.Date(tscastsub[min(id.na),'Date']),
+                                          as.Date(tscastsub[max(id.na),'Date'])))) #Only plot the area with NAs
+    }
+    pred_try
+  }
+}
+impute_preds[id.na,sn] <- CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KA15A'),37,pplot=T)[id.na,'pred']
+impute_preds[id.na,sn] <- CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KB14A'),37,pplot=T)[id.na,'pred']
+
 write.csv(impute_preds, file.path(outdir, 'rufidat_interp.csv'), row.names=F)
+impute_preds <- read.csv(file.path('rufiji_hydrodataimpute_20180329', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
+colnames(impute_preds)[2:(ncol(impute_preds))] <- substr(colnames(impute_preds),2,10)[2:(ncol(impute_preds))]
 
 #############################################################################################################
 #Plot clean and interpolated data
@@ -129,7 +164,7 @@ predsmelt$Agency <- NA
 for (gage in unique(predsmelt$ID)) {
   print(gage)
   genv <- gagesenv[gagesenv$RGS_No==gage,]
-  gname <- paste(genv$RGS_Loc,genv$RGS_Name,sep=" at ")
+  gname <- paste(genv$RGS_Loc,"river at",genv$RGS_Name,sep=" ")
   #Generate FlowScreen time series
   gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
   #Compute and output flowScreen metrics and plots
@@ -148,11 +183,13 @@ for (gage in unique(predsmelt$ID)) {
     dev.off()
   })
   #Make raw time series plot
-  rawsgplot <-ggplot(gts, aes(x=Date, y=Flow+0.01)) + 
+  rawsgplot <-ggplot(gts, aes(x=Date, y=Flow)) +
+    geom_rect(aes(xmin=as.Date('2001-10-01'), xmax=as.Date('2016-10-01'), ymin=min(gts$Flow), ymax=max(gts$Flow)), fill='#ffeda0', alpha=0.5) +
     geom_point(color='#bf812d', size=1.5) + 
-    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,],aes(x=Date, y=Flow+0.01), color='#045a8d', size=1.5) +
+    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], color='#045a8d', size=1.5) +
+    #geom_point(data=rufidat_clean[rufidat_clean$ID==gage & rufidat_clean$Date>'2001-10-01',], color='#4393c3', size=1.5) +
     geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,],aes(x=Date, y=Flow+0.01), color='#e31a1c', size=1.5) +
-    scale_y_sqrt(breaks=trans_breaks("sqrt", function(x) x ^ 2))+
+    scale_y_sqrt()+
     scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
     labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - ")) +
     theme_bw() + 
@@ -162,11 +199,11 @@ for (gage in unique(predsmelt$ID)) {
   dev.off()
 }
 
-
 ######################################## EXTRA ######################################################
 # ggplot(tscastsub, aes(x=Date, y=get(colnames(tscastsub)[sn])))+
 #   geom_point(data=try,aes(y=pred), color='red') + 
 #   geom_point(color='black') 
+############################################################
 # #Try imputeTS package Kalman filter
 # sn='1KA8A'
 # mindate <- rufidat_castsub[min(which(!is.na(rufidat_castsub[,sn]))),'Date']
@@ -176,3 +213,13 @@ for (gage in unique(predsmelt$ID)) {
 #   geom_point(aes(y=pred1KA8A), color='red') +
 #   geom_point(color='black')+
 #   scale_x_date(limits=as.Date(c('1965-01-01','1975-01-01')))
+##########################################################
+#Try out zoo na.approx - neither linear nor spline method is better
+# tscastsubzoo <- zoo(tscastsub[,sn])
+# coredata(tscastsubzoo)
+# #pred_try <- data.frame(pred=na.approx(tscastsubzoo,x=index(tscastsubzoo), na.rm=F, rule=2,method='linear',maxgap=37))
+# pred_try <- data.frame(pred=na.spline(tscastsubzoo,x=index(tscastsubzoo), na.rm=F,method='fmm'))
+# pred_try$Date <- tscastsub[,'Date']
+# ggplot(tscastsub, aes(x=Date, y=get(colnames(tscastsub)[sn])))+
+#   geom_point(data=pred_try,aes(y=pred), color='red') +
+#   geom_point(color='black')
