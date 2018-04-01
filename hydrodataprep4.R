@@ -173,23 +173,6 @@ for (gage in unique(predsmelt$ID)) {
   gname <- paste(genv$RGS_Loc,"river at",genv$RGS_Name,sep=" ")
   #Generate FlowScreen time series
   gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
-  #Compute and output flowScreen metrics and plots
-  tryCatch({
-    res <- metrics.all(gts)
-    ginfo <- data.frame(StationID=genv$RGS_No, StnName=gname, ProvState='Rufiji Basin',Country='Tanzania',
-                        Lat=genv$POINT_Y, Long=genv$POINT_X, Area=genv$WsArea, RHN='RBWB')
-    png(file.path(outdir,paste(gage,'screenb.png',sep="_")),width = 20, height=12,units='in',res=300)
-    screen.summary(res, type="b", StnInfo=ginfo)
-    dev.off()
-    png(file.path(outdir,paste(gage,'screenl.png',sep="_")),width = 20, height=12,units='in',res=300)
-    screen.summary(res, type="l", StnInfo=ginfo)
-    dev.off()
-    png(file.path(outdir,paste(gage,'screenh.png',sep="_")),width = 20, height=12,units='in',res=300)
-    screen.summary(res, type="h", StnInfo=ginfo)
-    dev.off()
-  }, finally = {
-    dev.off()
-  })
   #Make raw time series plot
   rawsgplot <-ggplot(gts, aes(x=Date, y=Flow)) +
     #geom_rect(aes(xmin=as.Date('2001-10-01'), xmax=as.Date('2016-10-01'), ymin=min(gts$Flow-1), ymax=max(gts$Flow+1)), fill='#ffffbf', alpha=0.1) +
