@@ -44,6 +44,14 @@ if (dir.exists(outdir)) {
   dir.create(outdir)
 }
 
+#Function to extract legend from graph as a grob to be re-inserted later
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
 
 #rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltab.dbf'))
@@ -194,7 +202,7 @@ reposition_legend(overlapplot_out, 'left', panel='panel-3-3')
 dev.off()
 
 #Check best date of period based on a set of requirements
-tryoverlap<-overlapplot[period_len>=15 & minyr>=10 & completeness>=0.65 & count>=15 & cyr>=2000 & cyr<=2018-15]
+tryoverlap<-overlapplot[period_len>=25 & minyr>=10 & completeness>=0.5 & count>=15 & cyr>=1990 & cyr<=2018-15]
 print(tryoverlap)
 
 ################################################
@@ -209,8 +217,126 @@ rufidat_cast <- dcast(rufidat_clean[rufidat_clean$ID %in% over5yr,], Date~ID, va
 #####################################################################
 #Select subset of gages to be used in the analysis
 #####################################################################
-#Have over 10 years of full data from 2001/10/01 to 2016/09/30
-rufidat_gapsummary
+#Have over 10 years of 90% complete data from 2001/10/01 to 2016/09/30
+rufidat_post1991 <- rufidat_gapsummary[gap_per<=0.1 & hyear>=1991,length(unique(hyear)),.(ID)]
+colnames(rufidat_post1991) <- c('ID','ycount1991')
+rufidat_post1991[rufidat_post1991$ycount>=15,]
+write.csv(rufidat_post1991, file.path(outdir, 'gageselect_post1991comp90.csv'))
+gageselect1991 <- rufidat_post1991[rufidat_post1991$ycount>=10,]
+
+rufidat_post2001 <- rufidat_gapsummary[gap_per<=0.1 & hyear>=2001,lengths(unique(hyear)),.(ID)]
+colnames(rufidat_post2001) <- c('ID','ycount2001')
+rufidat_post2001[rufidat_post2001$ycount>=15,]
+write.csv(rufidat_post2001, file.path(outdir, 'gageselect_post2001comp90.csv'))
+gageselect2001 <- rufidat_post2001[rufidat_post2001$ycount>=10,]
+
+rufidat_clean <- merge(rufidat_clean, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
+rufidat_clean <- merge(rufidat_clean, rufidat_post1991, by='ID',all.x=T)
+#######################################################################
+#Plot clean and interpolated data
+#######################################################################
+impute_preds <- read.csv(file.path('rufiji_hydrodataimpute_20180329', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
+colnames(impute_preds)[2:(ncol(impute_preds))] <- substr(colnames(impute_preds),2,10)[2:(ncol(impute_preds))]
+
+predsmelt <-melt(setDT(impute_preds),id.vars = 'Date',value.name='Flow',variable.name='ID')
+predsmelt <- predsmelt[,c(2,1,3)]
+predsmelt$SYM <- NA
+predsmelt$Agency <- NA
+
+########################################
+#Get example legend
+########################################
+gage='1KA2A'
+print(gage)
+genv <- gagesenv[gagesenv$RGS_No==gage,]
+#Generate FlowScreen time series
+gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
+gts_sel <- merge(gts, rufidat_post1991, by='ID', all.x=T)
+gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Selected data from 1991 to 2016: ", unique(gts_sel$ycount)," years.",sep="")
+
+#Make raw time series plot
+template <-ggplot() +
+  geom_point(data=gts_sel, aes(x=Date, y=Flow, color='brown'), size=1.5)+ 
+  geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow,color='red'), size=1.5) +
+  geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow,color='lightblue'), size=1.5) +
+  geom_point(data=rufidat_clean[rufidat_clean$ID==gage&rufidat_clean$hyear>=1991&rufidat_clean$ycount>=10&rufidat_clean$gap_per<=0.1,], 
+             aes(x=Date, y=Flow,color='darkblue'), size=1.5) +
+  scale_colour_manual(name='Hydrologic record',
+                      values =c('brown'='#bf812d','red'='#e31a1c','lightblue'='#9ecae1','darkblue'='#045a8d'),
+                      labels = c('Interpolated','Used in classification','Not used in classification','Deleted')) +
+  scale_y_sqrt(expand=c(0,0),limits=c(0,max(gts$Flow)+1))+
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+  labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - "))+
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+template
+#Get legend as a grob
+legendts <- get_legend(template)
+
+#########################################
+#Plot 'em
+plotseries <- function(gage){
+  print(gage)
+  genv <- gagesenv[gagesenv$RGS_No==gage,]
+  #Generate FlowScreen time series
+  gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
+  gts_sel <- merge(gts, rufidat_post1991, by='ID', all.x=T)
+  gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Data from 1991 to 2016: ", unique(gts_sel$ycount)," years.",sep="")
+  #Make raw time series plot
+  rawsgplot <-ggplot() +
+    geom_point(data=gts_sel, aes(x=Date, y=Flow),color='#bf812d', size=1.5)+ 
+    geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow),color='#e31a1c',size=1.5) +
+    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow),color='#9ecae1',size=1.5) +
+    geom_point(data=rufidat_clean[rufidat_clean$ID==gage&rufidat_clean$hyear>=1991&rufidat_clean$ycount>=10&rufidat_clean$gap_per<=0.1,], 
+               aes(x=Date, y=Flow),color='#045a8d', size=1.5) +
+    scale_y_sqrt(expand=c(0,0),limits=c(0,max(gts$Flow)+1))+
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+    labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - ")) +
+    theme_bw() + 
+    theme(axis.text.x = element_text(angle = 45, hjust=1))
+  p <- ggplot_gtable(ggplot_build(rawsgplot))
+  lay= t(c(rep(1,10),2))
+  png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
+  print(grid.arrange(p, legendts, ncol = 11, layout_matrix = lay))
+  dev.off()
+}
+plotflowscreen <- function(gage, div,thrs){
+  print(gage)
+  genv <- gagesenv[gagesenv$RGS_No==gage,]
+  #Generate FlowScreen time series
+  gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
+  gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,sep="")
+  gts$Flow <- gts$Flow/div
+
+  #Compute and output flowScreen metrics and plots
+  try({
+    res <- metrics.all(gts,NAthresh=thrs)
+    ginfo <- data.frame(StationID=genv$RGS_No, StnName=gname, ProvState='Rufiji Basin',Country='Tanzania',
+                        Lat=genv$POINT_Y, Long=genv$POINT_X, Area=genv$WsArea, RHN='RBWB')
+    png(file.path(outdir,paste(gage,'screenb.png',sep="_")),width = 20, height=12,units='in',res=300)
+    screen.summary(res, type="b", StnInfo=ginfo)
+    dev.off()
+    png(file.path(outdir,paste(gage,'screenl.png',sep="_")),width = 20, height=12,units='in',res=300)
+    screen.summary(res, type="l", StnInfo=ginfo)
+    dev.off()
+    png(file.path(outdir,paste(gage,'screenh.png',sep="_")),width = 20, height=12,units='in',res=300)
+    screen.summary(res, type="h", StnInfo=ginfo)
+    dev.off()
+  })
+}
+for (g in unique(predsmelt$ID)) {
+  #plotseries(g)
+  plotflowscreen(g,div=1)
+}
+
+#'1KA41A':Kendall
+#'1KA42A':Kendall
+#'1KA59':Kendall
+#'1KA71':BINSEG
+#'1KB15A':error in graphics 'at' and 'labels' lengths differ
+#'1BK17A':BINSEG
+#'1KB4A': BINSEG
+#'1KA33B':error
 
 #####################################################################
 #Assess representativity of gages regarding environmental variables
@@ -239,6 +365,10 @@ theme_envnoy <- function () {
       axis.title.y=element_blank()
     )
 }
+
+
+gagesenvrec[gagesenvrec$RGS_No %in% gageselect$ID,'select'] <- 'Y'
+gagesenvrec[!(gagesenvrec$RGS_No %in% gageselect$ID),'select'] <- 'N'
 
 envplot_area <- ggplot(rufienv, aes(x=WsArea)) + 
   geom_vline(xintercept=gagesenvrec$WsArea, color='red',alpha=0.4, size=0.75) +
