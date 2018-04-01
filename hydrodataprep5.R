@@ -29,8 +29,11 @@ library(pastecs) #For data preparation
 library(vegan) #For data preparation
 library(FD) #For gower's dist
 library(fifer) #for stratified sampling
-source("F:/Tanzania/Tanzania/bin/outside_src/Biostats.R")
-setwd("F:/Tanzania/Tanzania/results") #UPDATE
+
+rootdir="F:/Tanzania/Tanzania"
+source(file.path(rootdir,"bin/outside_src/Biostats.R"))
+source(file.path(rootdir,"bin/outside_src/Flowscreen.hyear.internal.R"))
+setwd(file.path(rootdir,"results")) #UPDATE
 datadir = file.path(getwd(),paste('rufiji_hydrodatainspect','20180326',sep='_')) #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
 outdir=file.path(getwd(),'rufiji_hydrodatafilter_20180327')
@@ -63,6 +66,8 @@ gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_
 #BUild summary tables
 rufidat_clean$year <- as.numeric(format(rufidat_clean$Date, "%Y"))
 rufidat_clean$month <- as.numeric(format(rufidat_clean$Date, "%m"))
+rufidat_clean<-hyear.internal(rufidat_clean,hyrstart=10) #Ignore hdoy
+
 rufidat_dt <- data.table(rufidat_clean)
 
 rufidat_datesummary <- rufidat_dt[,list(length(unique(ID))), .(Date)] #Compute number of gages with data for each date
@@ -74,36 +79,45 @@ record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
   geom_bar(data=rufidat_datesummary, aes(x=Date,y='1KB36',color=V1), stat='identity') +
   geom_point(size=2) +
   scale_x_date(date_breaks ="5 years") +
-  scale_colour_distiller(name='Number of gages',palette='Spectral') +
+  scale_colour_distiller(name='Number of gages',palette='Spectral',breaks=c(5,10,15,20,max(rufidat_datesummary$V1)),
+                         limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
   theme_bw()
-# png(file.path(outdir,'record_overview.png'),width = 20, height=12,units='in',res=300)
-# print(record_overview)
-# dev.off()
+png(file.path(outdir,'record_overview.png'),width = 20, height=12,units='in',res=300)
+print(record_overview)
+dev.off()
 
 #Compute length of gap between current daily record and previous record both within and between years for each date and gage
-rufidat_dt[, prevdate := ifelse(shift(ID, 1L, type="lag")==ID,shift(as.character(Date), 1L, type="lag"), NA)]
-rufidat_dt[, prevdateyr := ifelse((shift(ID, 1L, type="lag")==ID) & (shift(year, 1L, type="lag")==year),shift(as.character(Date), 1L, type="lag"), NA)]
-rufidat_dt$prevgap <- as.numeric(rufidat_dt$Date-as.Date(rufidat_dt$prevdate))
-rufidat_dt$prevgapyr <- as.numeric(rufidat_dt$Date-as.Date(rufidat_dt$prevdateyr))
+rufidat_dt[, prevdate := ifelse(data.table::shift(ID, 1L, type="lag")==ID, 
+                                data.table::shift(as.character(Date), 1L, type="lag"), NA)]
+rufidat_dt[, prevdateyr := ifelse((data.table::shift(ID, 1L, type="lag")==ID) & (data.table::shift(hyear, 1L, type="lag")==hyear),
+                                  data.table::shift(as.character(Date), 1L, type="lag"), NA)]
+rufidat_dt[, nextdate := ifelse(data.table::shift(ID, 1L, type="lead")==ID,
+                                data.table::shift(as.character(Date), 1L, type="lead"), NA)]
+rufidat_dt[, nextdateyr := ifelse((data.table::shift(ID, 1L, type="lead")==ID) & (data.table::shift(hyear, 1L, type="lead")==hyear),
+                                  data.table::shift(as.character(Date), 1L, type="lead"), NA)]
+
+rufidat_dt$gap <- as.numeric(as.Date(rufidat_dt$nextdate)-as.Date(rufidat_dt$prevdate))-2
+rufidat_dt$gapyr <- as.numeric(as.Date(rufidat_dt$nextdateyr)-as.Date(rufidat_dt$prevdateyr))-2
 
 ###############################################
 #Compute summary statistics in terms of amount of record, percentage of gaps, max length of gaps both
 #regarding entire record
-rufidat_summary <- rufidat_dt[,list(min_year=min(year), max_year=max(year), max_len=max(year)-min(year), 
-                                    max_lend=max(Date)-min(Date), gap_d=as.numeric((max(Date)-min(Date)))-length(unique(Date)), gap_per=1-(length(unique(Date))/as.numeric((max(Date)-min(Date)))),
-                                    max_gap = max(prevgap,na.rm=T))
+rufidat_summary <- rufidat_dt[,list(min_hyear=min(hyear), max_hyear=max(hyear), max_len=max(hyear)-min(hyear), 
+                                    max_lend=max(Date)-min(Date), gap_d=as.numeric((max(Date)-min(Date)))-length(unique(Date)), 
+                                    gap_per=1-(length(unique(Date))/as.numeric((max(Date)-min(Date)))),
+                                    max_gap = max(gap,na.rm=T))
                               ,.(ID)]
 #regarding yearly record
-rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(year, "12", "31", sep="-")), "%j"))-length(unique(Date)),
-                                       gap_per=1-(length(unique(Date))/as.numeric(format(as.Date(paste(year, "12", "31", sep="-")), "%j"))),
-                                       max_gap = max(prevgapyr,na.rm=T))
-                                 ,.(ID,year)]
+rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(hyear, "12", "31", sep="-")), "%j"))-length(unique(Date)), #Check the number of days in that year to account for leap years
+                                       gap_per=1-(length(unique(Date))/as.numeric(format(as.Date(paste(hyear, "12", "31", sep="-")), "%j"))),
+                                       max_gap = max(gapyr,na.rm=T))
+                                 ,.(ID,hyear)]
 
 #################################################
 #Compute number of valid years on record depending on the percentage of missing data tolerated to consider a year valid
 rufidat_gapyear <- data.frame(ID=unique(rufidat_gapsummary$ID))
 for (i in seq(0.5,0,-0.05)) {
-  df<-ddply(rufidat_gapsummary[rufidat_gapsummary$gap_per<=i,], .(ID), summarise, gcount=length(year))
+  df<-ddply(rufidat_gapsummary[rufidat_gapsummary$gap_per<=i,], .(ID), summarise, gcount=length(hyear))
   rufidat_gapyear <- merge(rufidat_gapyear,df, by='ID',all.x=T)
 }
 colnames(rufidat_gapyear) <- c('ID',paste('gagecount_gap', seq(0.5,0,-0.05),sep="_"))
@@ -116,7 +130,7 @@ rufidat_gapplot$maxgap <- as.numeric(substr(rufidat_gapplot$X1,15,18))
 gapplot <- ggplot(rufidat_gapplot, aes(x=minyr, y=V1, color=as.factor(maxgap))) + 
   scale_x_continuous(name='Record length (years)', breaks=seq(5,50,5), expand=c(0,0)) +
   scale_y_continuous(name='Number of gages', limits=c(0,35), breaks=seq(0,35,5),expand=c(0,0))+
-  scale_color_discrete(name="Maximum length of missing record per year (%)") +
+  scale_color_discrete(name="Maximum length of missing record per hydrologic year (%)") +
   guides(color=guide_legend(ncol=4)) +
   geom_line(size=1) +
   theme_bw() +
@@ -140,13 +154,12 @@ minyr=10
 #Compute for a given year, length of period, degree of overlap, and minimum length of total record, the number of gages
 overlap_comp <- function(dtoverlap, period_len, cyr, completeness, minyr) {
   return(c(period_len, cyr, completeness, minyr,
-           length(which(dtoverlap[dtoverlap$gagecount_gap_0.1>=minyr & dtoverlap$year>=cyr & dtoverlap$year<cyr+period_len,.N/period_len,.(ID)][,2]>=completeness)))
+           length(which(dtoverlap[dtoverlap$gagecount_gap_0.1>=minyr & dtoverlap$hyear>=cyr & dtoverlap$hyear<cyr+period_len,.N/period_len,.(ID)][,2]>=completeness)))
   )
 }
 
-dtoverlap[dtoverlap$gagecount_gap_0.1>=minyr & dtoverlap$year>=cyr & dtoverlap$year<cyr+period_len,.N/period_len,.(ID)]
-which(dtoverlap[dtoverlap$gagecount_gap_0.1>=minyr & dtoverlap$year>=cyr & dtoverlap$year<cyr+period_len,.N/period_len,.(ID)][,2]>=completeness)
-
+dtoverlap[dtoverlap$gagecount_gap_0.1>=minyr & dtoverlap$hyear>=cyr & dtoverlap$hyear<cyr+period_len,.N/period_len,.(ID)]
+which(dtoverlap[dtoverlap$gagecount_gap_0.1>=minyr & dtoverlap$hyear>=cyr & dtoverlap$hyear<cyr+period_len,.N/period_len,.(ID)][,2]>=completeness)
 
 overlapplot <- ldply(seq(5,35,1), function(a) {
   ldply(seq(1955,2017,1), function(b) {
@@ -165,11 +178,11 @@ overlapplot <- as.data.table(overlapplot)
 overlapplotmax <- overlapplot[, .SD[which.max(count)], .(period_len, completeness, minyr)]
 
 #Plot
-overlap_labels<-setNames(paste('Period of overlap:', seq(5,35,5),"years",sep=" "),seq(5,35,5))
+overlap_labels<-setNames(paste('Period of overlap:', seq(5,35,5),"hydrologic years",sep=" "),seq(5,35,5))
 overlapplot_out <-ggplot(overlapplotmax[overlapplotmax$period_len %in% seq(5,35,5),], aes(x=minyr, y=count, group=completeness, color=completeness)) +
   geom_line(size=1) +
   facet_wrap(~period_len, labeller=as_labeller(overlap_labels)) +
-  scale_x_continuous(name='Record length (years)', breaks=seq(5,50,5), expand=c(0,0)) +
+  scale_x_continuous(name='Record length (hydrologic years)', breaks=seq(5,50,5), expand=c(0,0)) +
   scale_y_continuous(name='Number of gages', limits=c(0,35), breaks=seq(0,35,5),expand=c(0,0))+
   theme_bw() +
   scale_color_distiller(palette='Spectral', breaks=c(0,0.25,0.5,0.75,1),name='Minimum overlap (% of years)') +
@@ -181,7 +194,7 @@ reposition_legend(overlapplot_out, 'left', panel='panel-3-3')
 dev.off()
 
 #Check best date of period based on a set of requirements
-tryoverlap<-overlapplot[period_len>=15 & minyr>=20 & completeness>=0.3 & count>=15 & cyr>=2001 & cyr<=2018-15]
+tryoverlap<-overlapplot[period_len>=15 & minyr>=10 & completeness>=0.65 & count>=15 & cyr>=2000 & cyr<=2018-15]
 print(tryoverlap)
 
 ################################################
@@ -192,6 +205,12 @@ rufidat_cast <- dcast(rufidat_clean[rufidat_clean$ID %in% over5yr,], Date~ID, va
 #png(file.path(outdir,'hydropairs.png'),width=40, height=40,units='in',res=300)
 #hydropairs(rufidat_cast, dec=3, use="pairwise.complete.obs", method="pearson")
 #dev.off()
+
+#####################################################################
+#Select subset of gages to be used in the analysis
+#####################################################################
+#Have over 10 years of full data from 2001/10/01 to 2016/09/30
+rufidat_gapsummary
 
 #####################################################################
 #Assess representativity of gages regarding environmental variables
