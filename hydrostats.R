@@ -17,6 +17,10 @@ library(data.table)
 devtools::install_github("messamat/EflowStats") #Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
 #Corrected a glitch in package, need to re-change package download to USGS-R/EflowStats
 library(EflowStats)
+source(file.path(rootdir,"bin/outside_src/Biostats.R"))
+library(vegan) 
+library(pastecs)
+library(FD)
 
 rootdir="F:/Tanzania/Tanzania" #UPDATE
 setwd(file.path(rootdir,"results")) 
@@ -56,7 +60,7 @@ HITcomp <- function(dfhydro, dfenv, gageID, hstats="all", floodquantile=0.95) {
   #Check data for completeness
   dailyQClean <- validate_data(dfhydro[dfhydro$ID==gageID,c("Date", "Flow")], yearType="water")
   #Calculate all hit stats
-  calc_allHITout <- calc_allHIT(dailyQClean, yearType="water", stats=hstats, digits=3, pref="mean",
+  calc_allHITout <- calc_allHIT(dailyQClean, yearType="water", stats=hstats, digits=10, pref="mean",
                                 drainArea=dfenv[dfenv$RGS_No==gageID,'WsArea'], floodThreshold = quantile(dailyQClean$discharge, floodquantile))
   return(calc_allHITout)
 }
@@ -77,16 +81,21 @@ for (gage in unique(rufidat_select$ID)) {
 #Calculate mag7 stats
 #magnifStatsOut <- calc_magnifSeven(dailyQClean,yearType="water",digits=3)
 
-
 ######################################################################
 #Classify gauges
+HITall_format <-melt(setDT(HITall), id.vars = "indice",variable.name = "ID") 
+HITall_format[is.infinite(HITall_format$value),'Value'] <- NA
+HITall_format[is.nan(HITall_format$value),'Value'] <- NA
+HITall_format <- dcast(HITall_format, ID ~ indice)
+HITall_format <- merge(HITall_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
+dimindices <- c('ma1','ma2',paste('ma',seq(12,23),sep=''),paste('ml',seq(1,12),sep=''),paste('mh',seq(1,12),sep=''), 
+                paste('dl',seq(1,5),sep=''),paste('dh',seq(1,5),sep=''),'ra1','ra3','ra6','ra7') #List of dimensional indices from Kennen et al. 2007
+HITall_format <- HITall_format[,(dimindices) := lapply(.SD, function(x) round(x/WsArea, digits=10)), .SDcols=dimindices] #Standardize dimensional indices by drainage area
+HITall_format[,WsArea:=NULL] #Remove WsArea
 
-#Standardize metrics
- #First magnitude metrics by drainage area
-
-
-hydrostats_tra <- data.stand(envdata,method='standardize',margin='column',plot=T) #Then columnwise z-standardize
-gauge_eucd<- vegdist(hydrostats_tra, method='euclidean') #Compute Euclidean distance
+HITall_stand <- data.stand(HITall_format[,2:(ncol(HITall_format))],method='standardize',margin='column',plot=F) #z-standardize columnwise 
+statHIT<- summary(HITall_stand)
+gauge_eucd<- gowdis(HITall_stand, w=rep(1,ncol(HITall_stand)), asym.bin = NULL) #Compute Gower's distance so that missing values will not be taken in account
 gaugecla_ward <-hclust(gauge_eucd, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 
 hclus.table(gaugecla_ward)
