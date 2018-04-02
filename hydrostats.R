@@ -14,7 +14,8 @@ library(plyr)
 library(dplyr)
 library(hydrostats)
 library(data.table)
-devtools::install_github("USGS-R/EflowStats") #Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
+devtools::install_github("messamat/EflowStats") #Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
+#Corrected a glitch in package, need to re-change package download to USGS-R/EflowStats
 library(EflowStats)
 
 rootdir="F:/Tanzania/Tanzania" #UPDATE
@@ -72,23 +73,6 @@ for (gage in unique(rufidat_select$ID)) {
     HITall <- merge(HITall, calc_allHITout, by='indice')
   })
 }
-
-gageID <- '1KA51A'
-dailyQClean <- validate_data(rufidat_select[rufidat_select$ID==gageID,c("Date", "Flow")], yearType="water")
-#Calculate all hit stats
-calc_allHITout <- calc_allHIT(dailyQClean, yearType="water", stats='all', digits=3, pref="mean",
-                              drainArea=dfenv[dfenv$RGS_No==gageID,'WsArea'], floodThreshold = quantile(dailyQClean$discharge, 0.95))
-
-colnames(calc_allHITout)[2] <- gage
-HITall <- merge(HITall, calc_allHITout, by='indice')
-
-#Troubleshoot error message (check out https://github.com/USGS-R/EflowStats/blob/23a680d8a4c657674828bc5d32f2d6a887f14fbb/R/calc_timingAverage.R):
-#Error in findInterval(x$log_discharge, break_pts) : 'vec' must be sorted non-decreasingly and not contain NAs"""
-gageID <- '1KA51A'
-dailyQClean <- validate_data(rufidat_select[rufidat_select$ID==gageID,c("Date", "Flow")], yearType="water")
-#Calculate all hit stats
-
-
 
 #Calculate mag7 stats
 #magnifStatsOut <- calc_magnifSeven(dailyQClean,yearType="water",digits=3)
