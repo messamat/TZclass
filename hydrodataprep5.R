@@ -120,6 +120,7 @@ rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(hye
                                        gap_per=1-(length(unique(Date))/as.numeric(format(as.Date(paste(hyear, "12", "31", sep="-")), "%j"))),
                                        max_gap = max(gapyr,na.rm=T))
                                  ,.(ID,hyear)]
+#write.csv(rufidat_gapsummary, file.path(outdir, 'rufidat_gapsummary.csv'), row.names=F)
 
 #################################################
 #Compute number of valid years on record depending on the percentage of missing data tolerated to consider a year valid
@@ -275,7 +276,7 @@ legendts <- get_legend(template)
 
 #########################################
 #Plot 'em
-plotseries <- function(gage){
+plotseries <- function(gage){ #Make a graph of a time series highlightinh delete, interpolated, used and non-used data
   print(gage)
   genv <- gagesenv[gagesenv$RGS_No==gage,]
   #Generate FlowScreen time series
@@ -300,7 +301,7 @@ plotseries <- function(gage){
   print(grid.arrange(p, legendts, ncol = 11, layout_matrix = lay))
   dev.off()
 }
-plotflowscreen <- function(gage, div,thrs){
+plotflowscreen <- function(gage, div,thrs){ #make graphs of FlowScreen package outputs
   print(gage)
   genv <- gagesenv[gagesenv$RGS_No==gage,]
   #Generate FlowScreen time series
