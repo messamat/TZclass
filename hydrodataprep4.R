@@ -66,9 +66,10 @@ na.lomb <- function(x) {
 #sn: column of the time series to be infilled
 #maxgap: maximum gap length to be imputed
 #Example values to test function:
-    # tscast=rufidat_cast
-    # sn=3
-    # maxgap=30
+#1KB8B, 1KB24, 1KB14A, 1KB50B, 1KA31, 1KA21A still have missing data
+  # tscast=rufidat_cast
+  # sn=8
+  # maxgap=180
 CustomImpute <- function(tscast, sn, maxgap) {
   if (sn > 1) {
     name<- colnames(tscast)[sn]
@@ -103,16 +104,18 @@ CustomImpute <- function(tscast, sn, maxgap) {
       pred[i] <- fit$model$Z %*% kr$smooth[i,]
     #Output observed and predicted predicted data
     tscastsub[id.na, sn] <- pred[id.na]
+    tscastsub[tscastsub[,sn]<0 & !is.na(tscastsub[,sn]),sn] <- 0
     return(tscastsub[,c(1,sn)])
   } else {
     warning('sn must be >1 as 1st column must be "Date"')
   }
 }
+
 #Fill in every gauge
 impute_preds <- data.frame(Date=rufidat_cast[,"Date"])
 for (i in 2:(ncol(rufidat_cast))) {
   try({
-  impute_preds<-merge(impute_preds, CustomImpute(rufidat_cast,i,maxgap=37), by='Date', all.x=T)
+  impute_preds<-merge(impute_preds, CustomImpute(rufidat_cast,i,maxgap=365), by='Date', all.x=T)
   })
 }
 #Append the two gauges for which there was not enough info 1KA4A and 1KA33B
@@ -120,8 +123,6 @@ impute_preds <- cbind(impute_preds,rufidat_cast[,which(!(colnames(rufidat_cast) 
 
 #Use forecast na.interp for two gages that for which interpolation didn't work well
 #Try out forecast package na.interp for seasonal series
-
-
 CustomImpute_nainterp <- function(tscast, sn, maxgap,pplot) {
   if (sn > 1) {
     mindate <- tscast[min(which(!is.na(tscast[,sn]))),'Date']
@@ -149,14 +150,15 @@ CustomImpute_nainterp <- function(tscast, sn, maxgap,pplot) {
     pred_try
   }
 }
-int1KA15A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KA15A'),37,pplot=T)
+int1KA15A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KA15A'),180,pplot=T)
 impute_preds[impute_preds$Date>=min(int1KA15A$Date) & impute_preds$Date<=max(int1KA15A$Date),
              which(colnames(impute_preds)=='1KA15A')] <- int1KA15A$pred
-int1KB14A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KB14A'),37,pplot=T)
+int1KB14A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KB14A'),180,pplot=T)
 impute_preds[impute_preds$Date>=min(int1KB14A$Date) & impute_preds$Date<=max(int1KB14A$Date),
              which(colnames(impute_preds)=='1KB14A')] <- int1KB14A$pred
 
-#write.csv(impute_preds, file.path(outdir, 'rufidat_interp.csv'), row.names=F)
+
+write.csv(impute_preds, file.path(outdir, 'rufidat_interp.csv'), row.names=F)
 impute_preds <- read.csv(file.path('rufiji_hydrodataimpute_20180329', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
 colnames(impute_preds)[2:(ncol(impute_preds))] <- substr(colnames(impute_preds),2,10)[2:(ncol(impute_preds))]
 
