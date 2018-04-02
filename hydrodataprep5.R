@@ -371,6 +371,17 @@ theme_envnoy <- function () {
 gagesenvrec[gagesenvrec$RGS_No %in% gageselect$ID,'select'] <- 'Y'
 gagesenvrec[!(gagesenvrec$RGS_No %in% gageselect$ID),'select'] <- 'N'
 
+envplot_ord <- ggplot(rufienv, aes(x=ReaOrd)) + 
+  geom_histogram(bins=50, fill='#878787', alpha=0.5) + 
+  geom_histogram(data=gagesenvrec, color='red',alpha=0.4, size=0.75) +
+  scale_x_continuous(name='Strahler river order',breaks=seq(1,9),
+                expand=c(0,0)) +
+  scale_y_log10(name='Number of reaches', expand=c(0,0),
+                breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) + 
+  theme_env()
+envplot_ord
+
 envplot_area <- ggplot(rufienv, aes(x=WsArea)) + 
   geom_vline(xintercept=gagesenvrec$WsArea, color='red',alpha=0.4, size=0.75) +
   geom_histogram(bins=50, fill='#878787', alpha=0.5) + 
@@ -505,7 +516,7 @@ envsubcat_std <- envsubcat_std[,-which(colnames(envsubcat_std)=='GridID')]
 #envar <- colnames(rufienvsub)
 #weight_gow <- c(0.5, 0.5, 1,1,1, 0.5, 0.5, 0.2, 0.2, 0.2, 0.2, 0.2, 0.333, 0.333, 0.333)
 
-#Computer Gower's dissimilarity on full fish dataset
+#Computer Gower's dissimilarity on full dataset
 set.seed(1)
 envsubcat_samp<-stratified(envsubcat_std, "ReaOrd", 0.1, select=NULL)
 rufi_gowdis <- gowdis(envsubcat_samp, w=rep(1,ncol(envsubcat_samp)), asym.bin = NULL)
