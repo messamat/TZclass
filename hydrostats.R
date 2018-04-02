@@ -33,10 +33,8 @@ if (dir.exists(outdir)) {
   print(paste('Create new directory:',outdir))
   dir.create(outdir)
 }
-
 gagesenv <- read.dbf(file.path(getwd(),'gages_netjoinclean.dbf'))
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
-
 rufidat_clean <- read.csv(file.path('rufiji_hydrodatainspect_20180326','rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
 rufidat_impute <- read.csv(file.path('rufiji_hydrodataimpute_20180329', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
 colnames(rufidat_impute)[2:(ncol(rufidat_impute))] <- substr(colnames(rufidat_impute),2,10)[2:(ncol(rufidat_impute))]
@@ -90,9 +88,9 @@ HITall_format <- dcast(HITall_format, ID ~ indice)
 HITall_format <- merge(HITall_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
 dimindices <- c('ma1','ma2',paste('ma',seq(12,23),sep=''),paste('ml',seq(1,12),sep=''),paste('mh',seq(1,12),sep=''), 
                 paste('dl',seq(1,5),sep=''),paste('dh',seq(1,5),sep=''),'ra1','ra3','ra6','ra7') #List of dimensional indices from Kennen et al. 2007
-HITall_format <- HITall_format[,(dimindices) := lapply(.SD, function(x) round(x/WsArea, digits=10)), .SDcols=dimindices] #Standardize dimensional indices by drainage area
-HITall_format[,WsArea:=NULL] #Remove WsArea
-
+HITall_format <- as.data.frame(HITall_format[,(dimindices) := lapply(.SD, function(x) round(x/WsArea, digits=10)), .SDcols=dimindices]) #Standardize dimensional indices by drainage area
+row.names(HITall_format) <- HITall_format$ID
+HITall_format <- HITall_format[,-which(colnames(HITall_format) %in% c('ID','WsArea'))] #Get rid of non-indices columns
 HITall_stand <- data.stand(HITall_format[,2:(ncol(HITall_format))],method='standardize',margin='column',plot=F) #z-standardize columnwise 
 statHIT<- summary(HITall_stand)
 gauge_eucd<- gowdis(HITall_stand, w=rep(1,ncol(HITall_stand)), asym.bin = NULL) #Compute Gower's distance so that missing values will not be taken in account
