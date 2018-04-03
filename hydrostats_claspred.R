@@ -23,6 +23,8 @@ library(pastecs)
 library(FD)
 library(cluster)
 library(pvclust)
+library(clusteval)
+library(adabag)
 library(ggplot2)
 library(ggdendro)
 
@@ -102,7 +104,7 @@ HITall_stand <- data.stand(HITall_format[,2:(ncol(HITall_format))],method='stand
 statHIT<- summary(HITall_stand)
 gauge_gow<- gowdis(HITall_stand, w=rep(1,ncol(HITall_stand)), asym.bin = NULL) #Compute Gower's distance so that missing values will not be taken in account
 
-########################################Classify based on raw indices
+########################################Classify based on raw indices############################################
 gaugecla_ward <-hclust(gauge_gow, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 
 #Diagnostics
@@ -112,6 +114,7 @@ coef.hclust(gaugecla_ward) #Compute agglomerative coefficient
 cor(gauge_gow, cophenetic(gaugecla_ward)) #Compute cophenetic coefficient
 hclus.cophenetic(gauge_gow, gaugecla_ward) #Plot cophenetic relationship 
 hclus.scree(gaugecla_ward) #Check out scree plot
+plot(gaugecla_ward, main="Ward's distance gauge cluster dendogram", xlab='Gauge ID', ylab="Gower's distance", hang=-1)   #par(mfrow=c(1,1))
 rect.hclust(gaugecla_ward, k=5) #Draw rectangle around k classes
 #Test significance of classes
 clus.stab <- pvclust(t(HITall_stand), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
@@ -119,11 +122,12 @@ plot(clus.stab)
 pvrect(clus.stab, alpha=0.90)
 #Get gauge classes
 gauge_class <-cutree(gaugecla_ward, k=5)
+write.csv(gauge_class, file.path(outdir,'class_rawgow_ward_5.csv'))
 #Boxplots
 HITall_new <- cbind(gauge_class,HITall_format)
-box.plots(HITall_new, by='gauge_class')
+#box.plots(HITall_new, by='gauge_class')
 
-########################################Classify based on PCoA synthetic indices
+########################################Classify based on PCoA synthetic indices######################################
 ###PCOA
 #Convert gowdis output to matrix
 gauge_gowmat <- as.matrix(gauge_gow)
@@ -149,7 +153,7 @@ ggplot(pcoa_scores, aes(x = PC1, y = PC2, label = rownames(pcoa_scores))) + geom
   geom_text(data=vec[vec$pval<=0.1,], aes(x = Dim1, y = Dim2, label = indice),  color = "red") + 
   theme_classic() +
   labs(title='PCoA gauges', x='PCo 1 (48%)', y='PCo2 (24%)')
-  
+
 ###Classification
 gauge_pceuc <- vegdist(pcoa_scores, method='euclidean')
 gaugecla_pcward <-hclust(gauge_pceuc, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
@@ -165,17 +169,28 @@ plot(gaugecla_pcward, main="Ward's distance gauge cluster dendogram", xlab='Gaug
 rect.hclust(gaugecla_pcward, k=3) #Draw rectangle around k classes
 rect.hclust(gaugecla_pcward, k=6) #Draw rectangle around k classes
 #Test significance of classes
-clus.stab <- pvclust(t(pcoa_scores), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
+clus.stab <- pvclust(t(pcoa_scores), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=1999)
 plot(clus.stab)
 pvrect(clus.stab, alpha=0.90)
 #Get gauge classes
-gauge_class <-cutree(gaugecla_pcward, k=6)
+gauge_classpc5 <-cutree(gaugecla_pcward, k=5)
+write.csv(gauge_classpc5, file.path(outdir,'class_pcoagow_ward_5.csv'))
+gauge_classpc6 <-cutree(gaugecla_pcward, k=6)
+write.csv(gauge_classpc6, file.path(outdir,'class_pcoagow_ward_6.csv'))
 #Boxplots
 HITpcoa_new <- cbind(gauge_class,pcoa_scores)
-box.plots(HITpcoa_new, by='gauge_class')
+#box.plots(HITpcoa_new, by='gauge_class')
 
-########################################Predict based on PCoA classification
-pred_envar <-c('CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAve','ReaSloAvg','WsLakInd','WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45')
+#Check cluster similarity
+cluster_similarity(gauge_class, gauge_classpc5, similarity='rand',method='independence')
+comembership_table(gauge_class, gauge_classpc5)
+
+########################################Predict based on PCoA classification and raw environmental predictors############################
+pred_envar <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd','WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45')
+gagesenv_pc6 <- merge(gagesenvrec[gagesenvrec$RGS_No %in% rufidat_select$ID, c('RGS_no',pred_envar)],gauge_classpc6, by.x='RGS_No', by.y='ID')
+adaboost.pc6r <- boosting(gauge_class~#pcoa 6-classes with raw environmental variables
+which(pred_envar <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd','WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45') %in% colnames(gagesenvrec))
+
 
 
 
