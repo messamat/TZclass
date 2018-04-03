@@ -92,13 +92,43 @@ for (gage in unique(rufidat_select$ID)) {
 
 #Calculate mag7 stats
 #magnifStatsOut <- calc_magnifSeven(dailyQClean,yearType="water",digits=3)
+HITall_formatmelt <-melt(setDT(HITall), id.vars = "indice",variable.name = "ID") 
+HITall_formatmelt[is.infinite(HITall_formatmelt$value),'value'] <- NA
+HITall_formatmelt[is.nan(HITall_formatmelt$value),'value'] <- NA
+
+#######################################################################################
+# Box plot of metrics
+HITallbox<- HITall_formatmelt
+HITallbox$group1 <- as.factor(substr(HITall_formatmelt$indice,1,1))
+HITallbox$group2 <- as.factor(substr(HITall_formatmelt$indice,2,2))
+HITallbox$indice_sub <- substr(HITall_formatmelt$indice,3,5)
+HITallbox$indice_sub <- factor(HITallbox$indice_sub, levels = unique(HITallbox$indice_sub[order(as.numeric(as.character(HITallbox$indice_sub)))]))
+HITallbox$group1 <- factor(HITallbox$group1, levels = c('m','f','d','t','r'), 
+                           labels = c("Magnitude", "Frequency", "Duration",'Timing',"Rate of change"))
+HITallbox$group2 <- factor(HITallbox$group2, levels = c('h','a','l'), labels=c("High flow",'Average flow',"Low flow"))
+
+
+HITallboxplot <-ggplot(HITallbox, aes(x=indice_sub, y=value, color=group1)) + 
+  scale_y_log10(name='Metric value') +
+  geom_boxplot() +
+  facet_grid(group2~group1, scales = "free", space="free_x") + 
+  scale_x_discrete(name='Metric number (Appendix 1)')+
+  theme_bw() +
+  theme(axis.title = element_text(size=18),
+        axis.text.y = element_text(size=18),
+        strip.text = element_text(size = 18),
+        legend.position='none')
+png(file.path(outdir,'HITallboxplot.png'),width=20, height=12,units='in',res=300)
+HITallboxplot
+dev.off()
+
+#HITallbox[HITallbox$indice_sub %in% seq(1,25,2),'label'] <- as.character(HITallbox[HITallbox$indice_sub %in% seq(1,25,2),'indice_sub'])
+#HITallbox[!(HITallbox$indice_sub %in% seq(1,25,2)),'label'] <- ''
+#scale_x_discrete(name='Metric number (Appendix 1)',aes(breaks=indice_sub),labels = HITallbox$label)
 
 ######################################################################
 #Format data to use in classification
-HITall_format <-melt(setDT(HITall), id.vars = "indice",variable.name = "ID") 
-HITall_format[is.infinite(HITall_format$value),'Value'] <- NA
-HITall_format[is.nan(HITall_format$value),'Value'] <- NA
-HITall_format <- dcast(HITall_format, ID ~ indice)
+HITall_format <- dcast(HITall_formatmelt, ID ~ indice)
 HITall_format <- merge(HITall_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
 dimindices <- c('ma1','ma2',paste('ma',seq(12,23),sep=''),paste('ml',seq(1,12),sep=''),paste('mh',seq(1,12),sep=''), 
                 paste('dl',seq(1,5),sep=''),paste('dh',seq(1,5),sep=''),'ra1','ra3','ra6','ra7') #List of dimensional indices from Kennen et al. 2007
