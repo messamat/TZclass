@@ -10,11 +10,12 @@
 
 #Purpose: compute hydrological metrics and classify stream gauges
 
+library(foreign)
 library(plyr)
 library(dplyr)
 library(hydrostats)
 library(data.table)
-devtools::install_github("messamat/EflowStats") #Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
+#devtools::install_github("messamat/EflowStats") #Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
 #Corrected a glitch in package, need to re-change package download to USGS-R/EflowStats
 library(EflowStats)
 source(file.path(rootdir,"bin/outside_src/Biostats.R"))
@@ -25,8 +26,12 @@ library(cluster)
 library(pvclust)
 library(clusteval)
 library(adabag)
+library(rpart)
+library(rpart.plot)
 library(ggplot2)
 library(ggdendro)
+source(file.path(rootdir,"bin/outside_src/Biostats.R"))
+source(file.path(rootdir,"bin/outside_src/Flowscreen.hyear.internal.R"))
 
 rootdir="F:/Tanzania/Tanzania" #UPDATE
 setwd(file.path(rootdir,"results")) 
@@ -121,11 +126,12 @@ clus.stab <- pvclust(t(HITall_stand), method.hclust='ward.D', method.dist='cor',
 plot(clus.stab)
 pvrect(clus.stab, alpha=0.90)
 #Get gauge classes
-gauge_class <-cutree(gaugecla_ward, k=5)
-write.csv(gauge_class, file.path(outdir,'class_rawgow_ward_5.csv'))
+classr5 <-cutree(gaugecla_ward, k=5)
+classr5_df <- data.frame(ID=names(classr5), gclass=classr5) 
+write.csv(classr5, file.path(outdir,'class_rawgow_ward_5.csv'))
 #Boxplots
-HITall_new <- cbind(gauge_class,HITall_format)
-#box.plots(HITall_new, by='gauge_class')
+HITall_new <- cbind(classr5,HITall_format)
+#box.plots(HITall_new, by='classr5')
 
 ########################################Classify based on PCoA synthetic indices######################################
 ###PCOA
@@ -147,7 +153,7 @@ vec$pval <- vec_ga$vectors$pvals
 #Visualize scores
 #ordiplot(gauge_pcoa, choices=c(1,2), type="text",display='sites', xlab='PCo 1 (48%)', ylab='PCo 2 (24%)')
 pcoa_scores <- as.data.frame(gauge_pcoa$points)
-colnames(pcoa_scores) <- c("PC1", "PC2")
+colnames(pcoa_scores) <- paste("PC",seq(1,ncol(pcoa_scores)),sep="")
 ggplot(pcoa_scores, aes(x = PC1, y = PC2, label = rownames(pcoa_scores))) + geom_label() +
   geom_segment(data=vec[vec$pval<=0.1,], aes(x = rep(0, 36), y = rep(0, 36), xend = Dim1 , yend = Dim2, label=indice)) + 
   geom_text(data=vec[vec$pval<=0.1,], aes(x = Dim1, y = Dim2, label = indice),  color = "red") + 
@@ -173,26 +179,73 @@ clus.stab <- pvclust(t(pcoa_scores), method.hclust='ward.D', method.dist='cor',u
 plot(clus.stab)
 pvrect(clus.stab, alpha=0.90)
 #Get gauge classes
-gauge_classpc5 <-cutree(gaugecla_pcward, k=5)
-write.csv(gauge_classpc5, file.path(outdir,'class_pcoagow_ward_5.csv'))
-gauge_classpc6 <-cutree(gaugecla_pcward, k=6)
+classpc5 <-cutree(gaugecla_pcward, k=5)
+write.csv(classpc5, file.path(outdir,'class_pcoagow_ward_5.csv'))
+classpc6 <-cutree(gaugecla_pcward, k=6)
+classpc6_df <- data.frame(ID=names(classpc6), gclass=classpc6) 
 write.csv(gauge_classpc6, file.path(outdir,'class_pcoagow_ward_6.csv'))
 #Boxplots
 HITpcoa_new <- cbind(gauge_class,pcoa_scores)
 #box.plots(HITpcoa_new, by='gauge_class')
 
 #Check cluster similarity
-cluster_similarity(gauge_class, gauge_classpc5, similarity='rand',method='independence')
-comembership_table(gauge_class, gauge_classpc5)
+cluster_similarity(classr5, classpc5, similarity='rand',method='independence')
+comembership_table(classr5, classpc5)
+########################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
+pred_envar <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd','WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45')
+gagesenv_r5 <- merge(gagesenvrec[gagesenvrec$RGS_No %in% rufidat_select$ID, c('RGS_No',pred_envar)],classr5_df, by.x='RGS_No', by.y='ID')
+rownames(gagesenv_r5) <- gagesenv_r5$RGS_No
+gagesenv_r5 <- gagesenv_r5[,-which('RGS_No' %in% colnames(gagesenv_r5))]
+gagesenv_r5$gclass <- as.factor(gagesenv_r5$gclass)
+rufienvsel_r5r <- rufienv[,c('GridID',pred_envar)]
+rownames(rufienvsel_r5r) <- rufienvsel_r5r$GridID
+rufienvsel_r5r <- rufienvsel_r5r[,-which('GridID' %in% colnames(rufienvsel_r5r))]
+#Single tree
+cat.r5r <- rpart(gclass~., data=gagesenv_r5, method='class',control=rpart.control(minsplit=1, minbucket=1, cp=0.05))
+summary(cat.r5r)
+rpart.plot(cat.r5r)
+#Boosted tree
+adaboost.r5r <- boosting(gclass~., data=gagesenv_r5, boos=TRUE, mfinal=100,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
+barplot(adaboost.r5r$imp[order(adaboost.r5r$imp, decreasing = TRUE)],
+        ylim = c(0, 100), main = "Variables Relative Importance",
+        col = "lightblue")
+adaboostcv.r5r <- boosting.cv(gclass~., data=gagesenv_r5, boos=TRUE, mfinal=10,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1), v=19)
+adaboostcv.r5r
+#Predict
+rufi_r5r<- predict.boosting(adaboost.r5r, newdata=rufienvsel_r5r, newmfinal=length(adaboost.r5r$trees))
+#rufi_r5rmaxprob <- adply(rufi_r5r$prob, 1, max)
+#qplot(rufi_r5rmaxprob$V1)
+rufi_r5r_pred <- cbind(rufienvsel_r5r,gclass=rufi_r5r$class)
+rufi_r5r_pred$GridID <- as.integer(rownames(rufi_r5r_pred)) 
+write.dbf(rufi_r5r_pred[,c('GridID','gclass')], file.path(outdir, "class_ward_raw/predict_r5r.dbf"))
 
 ########################################Predict based on PCoA classification and raw environmental predictors############################
 pred_envar <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd','WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45')
-gagesenv_pc6 <- merge(gagesenvrec[gagesenvrec$RGS_No %in% rufidat_select$ID, c('RGS_no',pred_envar)],gauge_classpc6, by.x='RGS_No', by.y='ID')
-adaboost.pc6r <- boosting(gauge_class~#pcoa 6-classes with raw environmental variables
-which(pred_envar <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd','WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45') %in% colnames(gagesenvrec))
-
-
-
+gagesenv_pc6 <- merge(gagesenvrec[gagesenvrec$RGS_No %in% rufidat_select$ID, c('RGS_No',pred_envar)],classpc6_df, by.x='RGS_No', by.y='ID')
+rownames(gagesenv_pc6) <- gagesenv_pc6$RGS_No
+gagesenv_pc6 <- gagesenv_pc6[,-which('RGS_No' %in% colnames(gagesenv_pc6))]
+gagesenv_pc6$gclass <- as.factor(gagesenv_pc6$gclass)
+rufienvsel_pc6r <- rufienv[,c('GridID',pred_envar)]
+rownames(rufienvsel_pc6r) <- rufienvsel_pc6r$GridID
+rufienvsel_pc6r <- rufienvsel_pc6r[,-which('GridID' %in% colnames(rufienvsel_pc6r))]
+#Single tree
+cat.pc6r <- rpart(gclass~., data=gagesenv_pc6, method='class',control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
+summary(cat.pc6r)
+rpart.plot(cat.pc6r)
+#Boosted tree
+adaboost.pc6r <- boosting(gclass~., data=gagesenv_pc6, boos=TRUE, mfinal=100,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
+barplot(adaboost.pc6r$imp[order(adaboost.pc6r$imp, decreasing = TRUE)],
+        ylim = c(0, 100), main = "Variables Relative Importance",
+        col = "lightblue")
+adaboostcv.pc6r <- boosting.cv(gclass~., data=gagesenv_pc6, boos=TRUE, mfinal=10,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1), v=19)
+adaboostcv.pc6r
+#Predict
+rufi_pc6r<- predict.boosting(adaboost.pc6r, newdata=rufienvsel_pc6r, newmfinal=length(adaboost.pc6r$trees))
+#rufi_pc6rmaxprob <- adply(rufi_pc6r$prob, 1, max)
+#qplot(rufi_pc6rmaxprob$V1)
+rufi_pc6r_pred <- cbind(rufienvsel_pc6r,gclass=rufi_pc6r$class)
+rufi_pc6r_pred$GridID <- as.integer(rownames(rufi_pc6r_pred)) 
+write.dbf(rufi_pc6r_pred[,c('GridID','gclass')], file.path(outdir, "class_ward_pcoa/predict_pc6r.dbf"))
 
 
 
