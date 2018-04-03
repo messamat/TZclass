@@ -104,19 +104,22 @@ HITallbox$group2 <- as.factor(substr(HITall_formatmelt$indice,2,2))
 HITallbox$indice_sub <- substr(HITall_formatmelt$indice,3,5)
 HITallbox$indice_sub <- factor(HITallbox$indice_sub, levels = unique(HITallbox$indice_sub[order(as.numeric(as.character(HITallbox$indice_sub)))]))
 HITallbox$group1 <- factor(HITallbox$group1, levels = c('m','f','d','t','r'), 
-                           labels = c("Magnitude", "Frequency", "Duration",'Timing',"Rate of change"))
-HITallbox$group2 <- factor(HITallbox$group2, levels = c('h','a','l'), labels=c("High flow",'Average flow',"Low flow"))
-
+                           labels = c("Magnitude-m", "Frequency-f", "Duration-d",'Timing-t',"Rate of change-r"))
+HITallbox$group2 <- factor(HITallbox$group2, levels = c('h','a','l'), labels=c("High flow-h",'Average flow-a',"Low flow-l"))
+lab <- ddply(HITallbox, .(indice), summarize, 
+             labels=median(value)-1.58*(quantile(value,0.75,na.rm=T)-quantile(value,0.25,na.rm=T))/sqrt(length(value)),
+             labels2=min(value))
+HITallbox <-  merge(HITallbox,lab, by='indice')
 
 HITallboxplot <-ggplot(HITallbox, aes(x=indice_sub, y=value, color=group1)) + 
   scale_y_log10(name='Metric value') +
   geom_boxplot() +
   facet_grid(group2~group1, scales = "free", space="free_x") + 
   scale_x_discrete(name='Metric number (Appendix 1)')+
-  theme_bw() +
-  theme(axis.title = element_text(size=18),
-        axis.text.y = element_text(size=18),
-        strip.text = element_text(size = 18),
+  theme_classic() +
+  theme(axis.title = element_text(size=16),
+        axis.text.y = element_text(size=16),
+        strip.text = element_text(size = 15.5),
         legend.position='none')
 png(file.path(outdir,'HITallboxplot.png'),width=20, height=12,units='in',res=300)
 HITallboxplot
@@ -162,6 +165,9 @@ write.csv(classr5, file.path(outdir,'class_rawgow_ward_5.csv'))
 #Boxplots
 HITall_new <- cbind(classr5,HITall_format)
 #box.plots(HITall_new, by='classr5')
+
+#rufidat_select_classr5 <- merge(rufidat_select, classr5_df, by="ID")
+#write.csv(rufidat_select_classr5, file.path(outdir, 'class_ward_raw/rufidat_select_classr5.csv'), row.names=F)
 
 ########################################Classify based on PCoA synthetic indices######################################
 ###PCOA
