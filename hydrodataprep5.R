@@ -53,6 +53,7 @@ get_legend<-function(myggplot){
 }
 
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
+rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
 
 #rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltab.dbf'))
 #numcol <- colnames(rufienv)[which(sapply(rufienv, is.numeric))]
@@ -90,9 +91,9 @@ record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
   scale_colour_distiller(name='Number of gages',palette='Spectral',breaks=c(5,10,15,20,max(rufidat_datesummary$V1)),
                          limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
   theme_bw()
-png(file.path(outdir,'record_overview.png'),width = 20, height=12,units='in',res=300)
-print(record_overview)
-dev.off()
+# png(file.path(outdir,'record_overview.png'),width = 20, height=12,units='in',res=300)
+# print(record_overview)
+# dev.off()
 
 #Compute length of gap between current daily record and previous record both within and between years for each date and gage
 rufidat_dt[, prevdate := ifelse(data.table::shift(ID, 1L, type="lag")==ID, 
@@ -146,9 +147,9 @@ gapplot <- ggplot(rufidat_gapplot, aes(x=minyr, y=V1, color=as.factor(maxgap))) 
   theme(panel.grid.minor=element_blank(),
         legend.position=c(0.65,0.85),
         legend.background = element_blank())
-png(file.path(outdir,'gapplot.png'),width = 8, height=8,units='in',res=300)
-print(gapplot)
-dev.off()
+# png(file.path(outdir,'gapplot.png'),width = 8, height=8,units='in',res=300)
+# print(gapplot)
+# dev.off()
 
 ############################################################
 #Now compute the number of gages as a function of record length and record overlap given that we only keep years with less than 10% of missing data
@@ -233,6 +234,7 @@ gageselect2001 <- rufidat_post2001[rufidat_post2001$ycount>=10,]
 
 rufidat_clean <- merge(rufidat_clean, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
 rufidat_clean <- merge(rufidat_clean, rufidat_post1991, by='ID',all.x=T)
+
 #######################################################################
 #Plot clean and interpolated data
 #######################################################################
@@ -247,7 +249,7 @@ predsmelt$Agency <- NA
 ########################################
 #Get example legend
 ########################################
-gage='1KA2A'
+gage='1KA9'
 print(gage)
 genv <- gagesenv[gagesenv$RGS_No==gage,]
 #Generate FlowScreen time series
@@ -257,11 +259,12 @@ gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Selected data from 199
 
 #Make raw time series plot
 template <-ggplot() +
-  geom_point(data=gts_sel, aes(x=Date, y=Flow, color='brown'), size=1.5)+ 
-  geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow,color='red'), size=1.5) +
-  geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow,color='lightblue'), size=1.5) +
-  geom_point(data=rufidat_clean[rufidat_clean$ID==gage&rufidat_clean$hyear>=1991&rufidat_clean$ycount>=10&rufidat_clean$gap_per<=0.1,], 
-             aes(x=Date, y=Flow,color='darkblue'), size=1.5) +
+  geom_point(data=gts_sel[gts_sel], aes(x=Date, y=Flow, color='brown'), size=1.5) + 
+  geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow,color='red'), size=1.5)+
+  geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow,color='lightblue'), size=1.5)+
+  geom_point(data=rufidat_clean[rufidat_clean$ID==gage&rufidat_clean$hyear>=1991&
+                                  rufidat_clean$ycount>=10&rufidat_clean$gap_per<=0.1,], 
+             aes(x=Date, y=Flow,color='darkblue'), size=1.5)+
   scale_colour_manual(name='Hydrologic record',
                       values =c('brown'='#bf812d','red'='#e31a1c','lightblue'='#9ecae1','darkblue'='#045a8d'),
                       labels = c('Interpolated','Used in classification','Not used in classification','Deleted')) +
@@ -270,22 +273,22 @@ template <-ggplot() +
   labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - "))+
   theme_bw() + 
   theme(axis.text.x = element_text(angle = 45, hjust=1))
-template
+print(template)
 #Get legend as a grob
 legendts <- get_legend(template)
 
-#########################################
-#Plot 'em
+##########################################Plot 'em
 plotseries <- function(gage){ #Make a graph of a time series highlightinh delete, interpolated, used and non-used data
   print(gage)
   genv <- gagesenv[gagesenv$RGS_No==gage,]
   #Generate FlowScreen time series
   gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
   gts_sel <- merge(gts, rufidat_post1991, by='ID', all.x=T)
+  gts_sel <- merge(gts_sel, rufidat_gapsummary[,c('ID','hyear','gap_per')], by=c('ID','hyear'))
   gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Data from 1991 to 2016: ", unique(gts_sel$ycount)," years.",sep="")
   #Make raw time series plot
   rawsgplot <-ggplot() +
-    geom_point(data=gts_sel, aes(x=Date, y=Flow),color='#bf812d', size=1.5)+ 
+    geom_point(data=gts_sel[gts_sel$gap_per<=0.1,], aes(x=Date, y=Flow),color='#bf812d', size=1.5)+ 
     geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow),color='#e31a1c',size=1.5) +
     geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow),color='#9ecae1',size=1.5) +
     geom_point(data=rufidat_clean[rufidat_clean$ID==gage&rufidat_clean$hyear>=1991&rufidat_clean$ycount>=10&rufidat_clean$gap_per<=0.1,], 
@@ -326,8 +329,8 @@ plotflowscreen <- function(gage, div,thrs){ #make graphs of FlowScreen package o
   })
 }
 for (g in unique(predsmelt$ID)) {
-  #plotseries(g)
-  plotflowscreen(g,div=1)
+  plotseries(g)
+  #plotflowscreen(g,div=1,thrs=0.5)
 }
 
 #'1KA41A':Kendall
