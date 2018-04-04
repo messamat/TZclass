@@ -35,9 +35,9 @@ source(file.path(rootdir,"bin/outside_src/Flowscreen.hyear.internal.R"))
 
 rootdir="F:/Tanzania/Tanzania" #UPDATE
 setwd(file.path(rootdir,"results")) 
-datadir = file.path(getwd(),paste('rufiji_hydrodatafilter','20180327',sep='_')) #UPDATE
+datadir = file.path(getwd(),'rufiji_hydrodatafilter') #UPDATE
 origdatadir = file.path(rootdir,"data") 
-outdir=file.path(getwd(),'rufiji_hydrodatastats_20180331')
+outdir=file.path(getwd(),'rufiji_hydrodatastats')
 if (dir.exists(outdir)) {
   print('Directory already exists')
 } else {
@@ -45,8 +45,8 @@ if (dir.exists(outdir)) {
   dir.create(outdir)
 }
 
-rufidat_clean <- read.csv(file.path('rufiji_hydrodatainspect_20180326','rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
-rufidat_impute <- read.csv(file.path('rufiji_hydrodataimpute_20180329', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
+rufidat_clean <- read.csv(file.path('rufiji_hydrodatainspect','rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
+rufidat_impute <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
 colnames(rufidat_impute)[2:(ncol(rufidat_impute))] <- substr(colnames(rufidat_impute),2,10)[2:(ncol(rufidat_impute))]
 rufidat_gapsummary <- read.csv(file.path(datadir, 'rufidat_gapsummary.csv'))
 rufidat_post1991<-read.csv(file.path(datadir, 'gageselect_post1991comp90.csv'))
