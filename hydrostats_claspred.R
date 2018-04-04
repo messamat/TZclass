@@ -100,7 +100,7 @@ allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", f
 rufidat_select1991 <- predsmelt[predsmelt$gap_per<=0.1 &  predsmelt$ycount1991>=10 & predsmelt$hyear>=1991 & predsmelt$hyear<2017,]
 HITpost1991 <- allHITcomp(as.data.frame(rufidat_select1991), gagesenv, 'ID')
 rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$hyear<2017 &  predsmelt$ycount_o15>=15,]
-HITo15y <- allHITcomp(as.data.frame(rufidat_select), gagesenv, 'ID')
+HITo15y <- allHITcomp(as.data.frame(rufidat_select_o15y), gagesenv, 'ID')
 
 ############################################### Box plot of metrics##############################
 HITallbox<- HITpost1991
@@ -134,7 +134,44 @@ dev.off()
 #HITallbox[!(HITallbox$indice_sub %in% seq(1,25,2)),'label'] <- ''
 #scale_x_discrete(name='Metric number (Appendix 1)',aes(breaks=indice_sub),labels = HITallbox$label)
 
-#####################Format data to use in classification and compute Gower's distance############
+########################################Format environmental data to be used in predictions##################################
+#Make subset of data
+colnames(rufienv)
+outcols <- c(1:4,6,7,9,45:70,93:113, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
+                                                                    'WsPAPer','WsDamDen','WsGeolMaj','WsLCMaj','ReaElvMin',
+                                                                    'ReaElvMax','SUM_LENGTH_GEO','Shape_Leng') |
+                                             !is.na(str_match(colnames(rufienv),'DirSum*'))))
+rufienvsub <- rufienv[,-outcols]
+rufienvsub$ReaDirMaj <- as.factor(rufienvsub$ReaDirMaj)
+colnames(rufienvsub)
+
+#Data transformation
+#Transform catchments
+str(rufienvsub)
+colnames(rufienvsub)
+factcol <- c(1,2,54,55,56,57,156,157,160)
+#hist.plots(rufienvsub[,-factcol]) #Inspect data
+logcols <- c('CatPopDen','ReaSloAvg','WsArea','WsPopDen')
+rufienvsub[,logcols] <- data.trans(data.frame(rufienvsub[,logcols]), method = 'log', plot = F)
+asincols <- c('CatFLosSum', paste('LCSum',c(1,2,3,4,5,6,7,8,10,12,23,34,45,56,67,78,89,'10_1'),sep='_'),'CatWatExt','CatResInd','CatLakInd','WsFLosSum_',
+              'WsWatExt','WsResInd','WsLakInd')
+rufienvsub[,asincols] <- data.trans(rufienvsub[,asincols], method = 'asin', plot = F)
+sqrtcols <- c('CatAIAvg', 'CatBio14Av','CatBio17Av','CatBio19Av','CatElvMax', 'CatElvAvg','CatSloAvg','CatSloStd','CatLen_1','CatPAPer',
+              'CatRoadDen','CatWatcha','CatMineDen','CatWatOcc','ReaPAPer','ReaElvAvg','WsBio14Av','WsBio17Av','WsBio19Av','WsElvMax',
+              'WsElvAvg','WsEroAvg','WsSloAvg','WsSloStd','WsDen','WsRoadDen','WsWatcha','WsMineDen','WsWatOcc','WsWatSea')
+rufienvsub[,sqrtcols] <- data.trans(rufienvsub[,sqrtcols], method = 'power',exp=.5, plot = F)
+#Transform watersheds
+#hist.plots(envsubws) #Inspect data
+
+#Then standardize to mean of 0 and unit variance
+rufienvsub_std <- rufienvsub[,-factcol]
+rufienvsub_std <- cbind(data.stand(rufienvsub_std, method = "standardize", margin = "column", plot = F),
+                       rufienvsub[,factcol])
+#Join standardized columns to gages
+gagesenv_format <- gagesenv[,c('RGS_No','GridID')]
+gagesenv_format <- merge(gagesenv_format,  rufienvsub_std, by='GridID')
+
+########################################Format hydrologic metrics to use in classification and compute Gower's distance############
 HITdist <- function(HITdf, gagelist) {
   HITdf_format <- dcast(HITdf, ID ~ indice)
   HITdf_format <- merge(HITdf_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
@@ -319,7 +356,7 @@ write.dbf(rufi_pc6r_pred[,c('GridID','gclass')], file.path(outdir, "class_ward_p
 
 ######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
 ########################################Classify based on raw indices############################################
-gaugegow_o15y <- HITdist(HITall_formatmelt, unique(rufidat_o15y[rufidat_o15y$ycount_o15>=15,'ID']))
+gaugegow_o15y <- HITdist(HITo15y)
 gaugecla_ward <-hclust(gaugegow_o15y, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 
 #Diagnostics
@@ -330,28 +367,60 @@ cor(gaugegow_o15y, cophenetic(gaugecla_ward)) #Compute cophenetic coefficient
 hclus.cophenetic(gaugegow_o15y, gaugecla_ward) #Plot cophenetic relationship 
 hclus.scree(gaugecla_ward) #Check out scree plot
 plot(gaugecla_ward, main="Ward's distance gauge cluster dendogram", xlab='Gauge ID', ylab="Gower's distance", hang=-1)   #par(mfrow=c(1,1))
-rect.hclust(gaugecla_ward, k=5) #Draw rectangle around k classes
-#Test significance of classes
-clus.stab <- pvclust(t(HITall_stand), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
-plot(clus.stab)
-pvrect(clus.stab, alpha=0.90)
+rect.hclust(gaugecla_ward, k=6) #Draw rectangle around k classes
 #Get gauge classes
-classr5 <-cutree(gaugecla_ward, k=5)
-classr5_df <- data.frame(ID=names(classr5), gclass=classr5) 
-outdirclass <- file.path(outdir,'class1991_ward_raw')
+classr6 <-cutree(gaugecla_ward, k=6)
+classr6_df <- data.frame(ID=names(classr6), gclass=classr6) 
+outdirclass <- file.path(outdir,'classo15y_ward_raw')
 if (dir.exists(outdirclass )) {
   print('Directory already exists')
 } else {
   print(paste('Create new directory:',outdirclass))
   dir.create(outdirclass )
 }
-write.csv(classr5, file.path(outdirclass,'class_rawgow_ward_5.csv'), row.names=F)
+write.csv(classr6, file.path(outdirclass,'class_rawgow_ward_6.csv'), row.names=F)
 #Boxplots
-HITall_new <- cbind(classr5,HITall_format)
-#box.plots(HITall_new, by='classr5')
+HITall_new <- cbind(classr6,HITo15y)
+#box.plots(HITall_new, by='classr6')
 
-#rufidat_select_classr5 <- merge(rufidat_select, classr5_df, by="ID")
-#write.csv(rufidat_select_classr5, file.path(outdir, 'class_ward_raw/rufidat_select_classr5.csv'), row.names=F)
+#rufidat_select_classr6 <- merge(rufidat_select_o15y, classr6_df, by="ID")
+#write.csv(rufidat_select_classr6, file.path(outdir, 'class_ward_raw/rufidat_select_classr6.csv'), row.names=F)
+
+########################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
+pred_envar <-c('CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','WsDRocAvg','WsPopDen','ReaElvAvg','WsLakInd','WsBio01Av','WsBio07Av',
+               'WsBio12Av','WsBio13Av','WsBio14Av','WsBio15Av','WsBio16Av','WsBio17Av','WsBio18Av','WsBio19Av','WsAIAvg','WsPermAvg','WsPoroAvg',
+               'LCSum_12','LCSum_23','LCSum_34','LCSum_45','LCSum_56','LCSum_67','LCSum_78','LCSum_89','WsFLosSum_')
+gagesenvsel <- gagesenv_format[gagesenv_format$RGS_No %in% unique(rufidat_select_o15y$ID),]
+
+gagesenv_r6 <- merge(gagesenvsel,classr6_df, by.x='RGS_No', by.y='ID')
+rownames(gagesenv_r6) <- gagesenv_r6$RGS_No
+gagesenv_r6 <- gagesenv_r6[,-which(colnames(gagesenv_r6) %in% c('RGS_No','GridID'))]
+gagesenv_r6$gclass <- as.factor(gagesenv_r6$gclass)
+rownames(rufienvsub_std) <- rufienvsub_std$GridID
+rufienvsub_std <- rufienvsub_std[,-which(colnames(rufienvsub_std) %in% 'GridID')]
+#Single tree
+cat.r6r <- rpart(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], method='class',control=rpart.control(minsplit=1, minbucket=1, cp=0.05))
+summary(cat.r6r)
+rpart.plot(cat.r6r)
+#Boosted tree
+adaboost.r6r <- boosting(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=500,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
+varimp <- data.frame(imp=adaboost.r6r$imp[order(adaboost.r6r$imp, decreasing = TRUE)])
+varimp$var <- rownames(varimp)
+ggplot(varimp[varimp$imp>0,],aes(x=reorder(var, -imp),y=imp)) + geom_bar(stat='identity') +
+  theme(axis.text.x=element_text(angle=90))
+#CV
+adaboostcv.r6r <- boosting.cv(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=100,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1), v=11)
+adaboostcv.r6r
+
+#Predict
+rufi_r6r<- predict.boosting(adaboost.r6r, newdata=rufienvsub_std[,pred_envar], newmfinal=length(adaboost.r6r$trees))
+#rufi_r6rmaxprob <- adply(rufi_r6r$prob, 1, max)
+#qplot(rufi_r6rmaxprob$V1)
+rufi_r6r_pred <- cbind(rufienvsel_r6r,gclass=rufi_r6r$class)
+rufi_r6r_pred$GridID <- as.integer(rownames(rufi_r6r_pred)) 
+write.dbf(rufi_r6r_pred[,c('GridID','gclass')], file.path(outdirclass, "predict_r6r.dbf"))
+
+
 
 
 
