@@ -383,8 +383,8 @@ theme_envnoy <- function () {
 }
 
 envplot <- function(selected_gages, plotname) {
-  gagesenvrec[gagesenvrec$RGS_No %in% as.character(selected_gages[,'ID']),'select'] <- 'Y'
-  gagesenvrec[!(gagesenvrec$RGS_No %in% selected_gages[,'ID']),'select'] <- 'N'
+  gagesenvrec[gagesenvrec$RGS_No %in% selected_gages$ID,'select'] <- 'Y'
+  gagesenvrec[!(gagesenvrec$RGS_No %in% selected_gages$ID),'select'] <- 'N'
   
   selRGB <- rgb(168,0,0,maxColorValue = 255)
   notselRGB <- rgb(104,104,104, maxColorValue = 255)
@@ -488,11 +488,13 @@ envplot <- function(selected_gages, plotname) {
   #plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
   
   png(file.path(outdir,plotname),width=20, height=12,units='in',res=300)
-  plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
+  print(plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3))
   dev.off()
 }
 envplot(gageselect1991, 'gage_env1991.png')
+envplot(gageselect_o15y, 'gage_envo15y.png')
 
+gageselect_o15y[which(!(gageselect_o15y$ID %in% gageselect1991$ID)),]
 
 #####################################################
 #In multidimensional environment
