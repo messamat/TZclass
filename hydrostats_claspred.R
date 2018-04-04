@@ -103,36 +103,36 @@ rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$hyear<2017 &
 HITo15y <- allHITcomp(as.data.frame(rufidat_select_o15y), gagesenv, 'ID')
 
 ############################################### Box plot of metrics##############################
-HITallbox<- HITpost1991
-HITallbox$group1 <- as.factor(substr(HITall_formatmelt$indice,1,1))
-HITallbox$group2 <- as.factor(substr(HITall_formatmelt$indice,2,2))
-HITallbox$indice_sub <- substr(HITall_formatmelt$indice,3,5)
-HITallbox$indice_sub <- factor(HITallbox$indice_sub, levels = unique(HITallbox$indice_sub[order(as.numeric(as.character(HITallbox$indice_sub)))]))
-HITallbox$group1 <- factor(HITallbox$group1, levels = c('m','f','d','t','r'), 
-                           labels = c("Magnitude-m", "Frequency-f", "Duration-d",'Timing-t',"Rate of change-r"))
-HITallbox$group2 <- factor(HITallbox$group2, levels = c('h','a','l'), labels=c("High flow-h",'Average flow-a',"Low flow-l"))
-lab <- ddply(HITallbox, .(indice), summarize, 
-             labels=median(value)-1.58*(quantile(value,0.75,na.rm=T)-quantile(value,0.25,na.rm=T))/sqrt(length(value)),
-             labels2=min(value))
-HITallbox <-  merge(HITallbox,lab, by='indice')
+HITboxplot <- function(HITdf, plotname) {
+  HITallbox<- HITdf
+  HITallbox$group1 <- as.factor(substr(HITdf$indice,1,1))
+  HITallbox$group2 <- as.factor(substr(HITdf$indice,2,2))
+  HITallbox$indice_sub <- substr(HITdf$indice,3,5)
+  HITallbox$indice_sub <- factor(HITallbox$indice_sub, levels = unique(HITallbox$indice_sub[order(as.numeric(as.character(HITallbox$indice_sub)))]))
+  HITallbox$group1 <- factor(HITallbox$group1, levels = c('m','f','d','t','r'), 
+                             labels = c("Magnitude-m", "Frequency-f", "Duration-d",'Timing-t',"Rate of change-r"))
+  HITallbox$group2 <- factor(HITallbox$group2, levels = c('h','a','l'), labels=c("High flow-h",'Average flow-a',"Low flow-l"))
+  lab <- ddply(HITallbox, .(indice), summarize, 
+               labels=median(value)-1.58*(quantile(value,0.75,na.rm=T)-quantile(value,0.25,na.rm=T))/sqrt(length(value)),
+               labels2=min(value))
+  HITallbox <-  merge(HITallbox,lab, by='indice')
+  HITallboxplot <-ggplot(HITallbox, aes(x=indice_sub, y=value, color=group1)) + 
+    scale_y_log10(name='Metric value') +
+    geom_boxplot() +
+    facet_grid(group2~group1, scales = "free", space="free_x") + 
+    scale_x_discrete(name='Metric number (Appendix 1)')+
+    theme_classic() +
+    theme(axis.title = element_text(size=16),
+          axis.text.y = element_text(size=16),
+          strip.text = element_text(size = 15.5),
+          legend.position='none')
+  png(file.path(outdir,plotname),width=20, height=12,units='in',res=300)
+  print(HITallboxplot)
+  dev.off()
+}
 
-HITallboxplot <-ggplot(HITallbox, aes(x=indice_sub, y=value, color=group1)) + 
-  scale_y_log10(name='Metric value') +
-  geom_boxplot() +
-  facet_grid(group2~group1, scales = "free", space="free_x") + 
-  scale_x_discrete(name='Metric number (Appendix 1)')+
-  theme_classic() +
-  theme(axis.title = element_text(size=16),
-        axis.text.y = element_text(size=16),
-        strip.text = element_text(size = 15.5),
-        legend.position='none')
-png(file.path(outdir,'HITallboxplotpost1991.png'),width=20, height=12,units='in',res=300)
-HITallboxplot
-dev.off()
-
-#HITallbox[HITallbox$indice_sub %in% seq(1,25,2),'label'] <- as.character(HITallbox[HITallbox$indice_sub %in% seq(1,25,2),'indice_sub'])
-#HITallbox[!(HITallbox$indice_sub %in% seq(1,25,2)),'label'] <- ''
-#scale_x_discrete(name='Metric number (Appendix 1)',aes(breaks=indice_sub),labels = HITallbox$label)
+HITboxplot(HITpost1991,'HITallboxplotpost1991.png')
+HITboxplot(HITo15y, 'HITallboxploto15y.png')
 
 ########################################Format environmental data to be used in predictions##################################
 #Make subset of data
@@ -287,8 +287,9 @@ HITpcoa_new <- cbind(gauge_class,pcoa_scores)
 cluster_similarity(classr5, classpc5, similarity='rand',method='independence')
 comembership_table(classr5, classpc5)
 ########################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
-pred_envar <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd','WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45')
-gagesenv_r5 <- merge(gagesenvrec[gagesenvrec$RGS_No %in% rufidat_select$ID, c('RGS_No',pred_envar)],classr5_df, by.x='RGS_No', by.y='ID')
+pred_envar1 <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd',
+                'WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45')
+gagesenv_r5 <- merge(gagesenvrec[gagesenvrec$RGS_No %in% rufidat_select$ID, c('RGS_No',pred_envar1)],classr5_df, by.x='RGS_No', by.y='ID')
 rownames(gagesenv_r5) <- gagesenv_r5$RGS_No
 gagesenv_r5 <- gagesenv_r5[,-which('RGS_No' %in% colnames(gagesenv_r5))]
 gagesenv_r5$gclass <- as.factor(gagesenv_r5$gclass)
@@ -387,9 +388,13 @@ HITall_new <- cbind(classr6,HITo15y)
 #write.csv(rufidat_select_classr6, file.path(outdir, 'class_ward_raw/rufidat_select_classr6.csv'), row.names=F)
 
 ########################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
-pred_envar <-c('CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','WsDRocAvg','WsPopDen','ReaElvAvg','WsLakInd','WsBio01Av','WsBio07Av',
+#Set #1
+pred_envar1 <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd',
+                'WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45')
+#Set #2
+pred_envar <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','WsDRocAvg','WsPopDen','ReaElvAvg','WsLakInd','WsBio01Av','WsBio07Av',
                'WsBio12Av','WsBio13Av','WsBio14Av','WsBio15Av','WsBio16Av','WsBio17Av','WsBio18Av','WsBio19Av','WsAIAvg','WsPermAvg','WsPoroAvg',
-               'LCSum_12','LCSum_23','LCSum_34','LCSum_45','LCSum_56','LCSum_67','LCSum_78','LCSum_89','WsFLosSum_')
+               'LCSum_12','LCSum_23','LCSum_34','LCSum_45','LCSum_67','LCSum_78','LCSum_89','WsFLosSum_')
 gagesenvsel <- gagesenv_format[gagesenv_format$RGS_No %in% unique(rufidat_select_o15y$ID),]
 
 gagesenv_r6 <- merge(gagesenvsel,classr6_df, by.x='RGS_No', by.y='ID')
@@ -403,7 +408,7 @@ cat.r6r <- rpart(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], method='cl
 summary(cat.r6r)
 rpart.plot(cat.r6r)
 #Boosted tree
-adaboost.r6r <- boosting(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=500,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
+adaboost.r6r <- boosting(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=1000,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
 varimp <- data.frame(imp=adaboost.r6r$imp[order(adaboost.r6r$imp, decreasing = TRUE)])
 varimp$var <- rownames(varimp)
 ggplot(varimp[varimp$imp>0,],aes(x=reorder(var, -imp),y=imp)) + geom_bar(stat='identity') +
@@ -418,7 +423,7 @@ rufi_r6r<- predict.boosting(adaboost.r6r, newdata=rufienvsub_std[,pred_envar], n
 #qplot(rufi_r6rmaxprob$V1)
 rufi_r6r_pred <- cbind(rufienvsel_r6r,gclass=rufi_r6r$class)
 rufi_r6r_pred$GridID <- as.integer(rownames(rufi_r6r_pred)) 
-write.dbf(rufi_r6r_pred[,c('GridID','gclass')], file.path(outdirclass, "predict_r6r.dbf"))
+write.dbf(rufi_r6r_pred[,c('GridID','gclass')], file.path(outdirclass, "predict_r6r_env2.dbf"))
 
 
 
