@@ -34,9 +34,9 @@ rootdir="F:/Tanzania/Tanzania"
 source(file.path(rootdir,"bin/outside_src/Biostats.R"))
 source(file.path(rootdir,"bin/outside_src/Flowscreen.hyear.internal.R"))
 setwd(file.path(rootdir,"results")) #UPDATE
-datadir = file.path(getwd(),paste('rufiji_hydrodatainspect','20180326',sep='_')) #UPDATE
+datadir = file.path(getwd(),'rufiji_hydrodatainspect') #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
-outdir=file.path(getwd(),'rufiji_hydrodatafilter_20180327')
+outdir=file.path(getwd(),'rufiji_hydrodatafilter')
 if (dir.exists(outdir)) {
   print('Directory already exists')
 } else {
@@ -94,9 +94,9 @@ record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
   theme_classic() + 
   theme(text=element_text(size=24),
         axis.text.x = element_text(angle = 45, hjust=1))
-png(file.path(outdir,'record_overview20180403.png'),width = 20, height=12,units='in',res=300)
-print(record_overview)
-dev.off()
+# png(file.path(outdir,'record_overview20180403.png'),width = 20, height=12,units='in',res=300)
+# print(record_overview)
+# dev.off()
 
 #Compute length of gap between current daily record and previous record both within and between years for each date and gage
 rufidat_dt[, prevdate := ifelse(data.table::shift(ID, 1L, type="lag")==ID, 
@@ -222,26 +222,33 @@ rufidat_cast <- dcast(rufidat_clean[rufidat_clean$ID %in% over5yr,], Date~ID, va
 #####################################################################
 #Select subset of gages to be used in the analysis
 #####################################################################
-#Have over 10 years of 90% complete data from 2001/10/01 to 2016/09/30
+#Have over 10 years of 90% complete data from 1991/10/01 to 2016/09/30
 rufidat_post1991 <- rufidat_gapsummary[gap_per<=0.1 & hyear>=1991,length(unique(hyear)),.(ID)]
 colnames(rufidat_post1991) <- c('ID','ycount1991')
 rufidat_post1991[rufidat_post1991$ycount>=15,]
-write.csv(rufidat_post1991, file.path(outdir, 'gageselect_post1991comp90.csv'))
+write.csv(rufidat_post1991, file.path(outdir, 'gageselect_post1991comp90.csv'), row.names=F)
 gageselect1991 <- rufidat_post1991[rufidat_post1991$ycount>=10,]
 
 rufidat_post2001 <- rufidat_gapsummary[gap_per<=0.1 & hyear>=2001,lengths(unique(hyear)),.(ID)]
 colnames(rufidat_post2001) <- c('ID','ycount2001')
 rufidat_post2001[rufidat_post2001$ycount>=15,]
-write.csv(rufidat_post2001, file.path(outdir, 'gageselect_post2001comp90.csv'))
+write.csv(rufidat_post2001, file.path(outdir, 'gageselect_post2001comp90.csv'), row.names=F)
 gageselect2001 <- rufidat_post2001[rufidat_post2001$ycount>=10,]
 
+#Have over 10 years of 90% complete data from 2001/10/01 to 2016/09/30
+rufidat_o15y <- rufidat_gapyear[!is.na(rufidat_gapyear$gagecount_gap_0.1),c('ID', 'gagecount_gap_0.1')]
+colnames(rufidat_o15y) <- c('ID','ycount_o15')
+write.csv(rufidat_o15y, file.path(outdir, 'gageselect_o15comp90.csv'), row.names=F)
+gageselect_o15y <- rufidat_o15y[rufidat_o15y$ycount>=15,]
+
+####
 rufidat_clean <- merge(rufidat_clean, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
 rufidat_clean <- merge(rufidat_clean, rufidat_post1991, by='ID',all.x=T)
 
 #######################################################################
 #Plot clean and interpolated data
 #######################################################################
-impute_preds <- read.csv(file.path('rufiji_hydrodataimpute_20180329', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
+impute_preds <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
 colnames(impute_preds)[2:(ncol(impute_preds))] <- substr(colnames(impute_preds),2,10)[2:(ncol(impute_preds))]
 
 predsmelt <-melt(setDT(impute_preds),id.vars = 'Date',value.name='Flow',variable.name='ID')
@@ -375,125 +382,117 @@ theme_envnoy <- function () {
     )
 }
 
-
-gagesenvrec[gagesenvrec$RGS_No %in% gageselect1991$ID,'select'] <- 'Y'
-gagesenvrec[!(gagesenvrec$RGS_No %in% gageselect1991$ID),'select'] <- 'N'
-
-# envplot_ord <- ggplot(rufienv, aes(x=ReaOrd)) + 
-#   geom_histogram(bins=50, fill='#878787', alpha=0.5) + 
-#   geom_histogram(data=gagesenvrec, color='red',alpha=0.4, size=0.75) +
-#   scale_x_continuous(name='Strahler river order',breaks=seq(1,9),
-#                 expand=c(0,0)) +
-#   scale_y_log10(name='Number of reaches', expand=c(0,0),
-#                 breaks = trans_breaks("log10", function(x) 10^x),
-#                 labels = trans_format("log10", math_format(10^.x))) + 
-#   theme_env()
-# envplot_ord
-selRGB <- rgb(168,0,0,maxColorValue = 255)
-notselRGB <- rgb(104,104,104, maxColorValue = 255)
-
-envplot_area <- ggplot(rufienv, aes(x=WsArea)) + 
-  geom_vline(data=gagesenvrec, aes(xintercept=WsArea, color=select),alpha=0.5, size=0.75) +
-  geom_histogram(bins=50, fill='#878787', alpha=0.5) + 
-  scale_x_log10(name=expression('Watershed area'~(km^2)),
-                breaks = c(1,10,100,1000,10000,100000),
-                labels = c(1,10,expression(10^2),expression(10^3),expression(10^4),expression(10^5)),
-                expand=c(0,0)) +
-  scale_y_continuous(name='Number of reaches', expand=c(0,0)) + 
-  scale_color_manual(values=c(notselRGB,selRGB))+
-  theme_env()
-#envplot_area
-envplot_elv <- ggplot(rufienv, aes(x=ReaElvAvg)) +
-  geom_vline(data=gagesenvrec, aes(xintercept=ReaElvAvg, color=select),alpha=0.5, size=0.75) +
-  geom_histogram(bins=50,fill='#fdbf6f', alpha=0.65) + 
-  scale_x_continuous(name=expression('River reach average elevation (m)'),
-                     expand=c(0,0)) +
-  scale_y_continuous(name='Number of reaches',expand=c(0,0)) +
-  scale_color_manual(values=c(notselRGB,selRGB))+
-  theme_envnoy()
-#envplot_elv
-envplot_preci <- ggplot(rufienv, aes(x=WsBio12Av)) + 
-  geom_vline(data=gagesenvrec, aes(xintercept=WsBio12Av, color=select),alpha=0.5, size=0.75) +
-  geom_histogram(bins=50,fill='#1f78b4', alpha=0.4) + 
-  scale_x_continuous(name=expression('Upstream mean annual precipitation (mm)'),
-                     expand=c(0,0)) +
-  scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
-  theme(axis.title.y=element_blank()) +
-  scale_color_manual(values=c(notselRGB,selRGB))+
-  theme_envnoy()
-#envplot_preci
-
-
-envplot_watext <- ggplot(rufienv, aes(x=100*CatWatExt)) + 
-  geom_vline(data=gagesenvrec, aes(xintercept=100*CatWatExt, color=select),alpha=0.5, size=0.75) +
-  geom_histogram(bins=50,fill='#35978f', alpha=0.4) + 
-  scale_x_continuous(name=expression('Catchment max. water extent 1984-2015 (% area)'),
-                     expand=c(0,0)) +
-  scale_y_continuous(trans='sqrt',name='Number of reaches',expand=c(0,0)) + 
-  scale_color_manual(values=c(notselRGB,selRGB))+
-  theme_env()
-#envplot_watext
-rufienv$CatGeolMaj <- factor(rufienv$CatGeolMaj, levels = unique(rufienv$CatGeolMaj[order(as.numeric(as.character(rufienv$CatGeolMaj)))]))
-envplot_geol <-  ggplot(rufienv, aes(x=CatGeolMaj)) + 
-  geom_bar(fill='#8c510a', alpha=0.4, stat='count') +
-  geom_bar(data=gagesenvrec, aes(color=select),fill='white',alpha=0.4, size=0.75) +
-  scale_x_discrete(name=expression('Main catchment lithology (GMIS number)')) +
-  scale_y_continuous(trans='log10',name='Number of reaches') + 
-  scale_color_manual(values=c(notselRGB,selRGB))+
-  theme_envnoy() +
-  theme(axis.text.x = element_text(angle = 45, hjust=1))
-#envplot_geol
-envplot_pop <- ggplot(rufienv, aes(x=CatPopDen)) + 
-  geom_vline(data=gagesenvrec, aes(xintercept=CatPopDen, color=select),alpha=0.5, size=0.75) +
-  geom_histogram(bins=50,fill='#4d9221', alpha=0.4) + 
-  scale_x_log10(name=expression('Catchment population density'~(persons/km^2)),
-                breaks=c(1,5,10,50,100,1000),
-                expand=c(0,0)) +
-  scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
-  scale_color_manual(values=c(notselRGB,selRGB))+
-  theme_envnoy()
+envplot <- function(selected_gages, plotname) {
+  gagesenvrec[gagesenvrec$RGS_No %in% as.character(selected_gages[,'ID']),'select'] <- 'Y'
+  gagesenvrec[!(gagesenvrec$RGS_No %in% selected_gages[,'ID']),'select'] <- 'N'
   
-#envplot_pop
+  selRGB <- rgb(168,0,0,maxColorValue = 255)
+  notselRGB <- rgb(104,104,104, maxColorValue = 255)
+  
+  envplot_area <- ggplot(rufienv, aes(x=WsArea)) + 
+    geom_vline(data=gagesenvrec, aes(xintercept=WsArea, color=select),alpha=0.5, size=0.75) +
+    geom_histogram(bins=50, fill='#878787', alpha=0.5) + 
+    scale_x_log10(name=expression('Watershed area'~(km^2)),
+                  breaks = c(1,10,100,1000,10000,100000),
+                  labels = c(1,10,expression(10^2),expression(10^3),expression(10^4),expression(10^5)),
+                  expand=c(0,0)) +
+    scale_y_continuous(name='Number of reaches', expand=c(0,0)) + 
+    scale_color_manual(values=c(notselRGB,selRGB))+
+    theme_env()
+  #envplot_area
+  envplot_elv <- ggplot(rufienv, aes(x=ReaElvAvg)) +
+    geom_vline(data=gagesenvrec, aes(xintercept=ReaElvAvg, color=select),alpha=0.5, size=0.75) +
+    geom_histogram(bins=50,fill='#fdbf6f', alpha=0.65) + 
+    scale_x_continuous(name=expression('River reach average elevation (m)'),
+                       expand=c(0,0)) +
+    scale_y_continuous(name='Number of reaches',expand=c(0,0)) +
+    scale_color_manual(values=c(notselRGB,selRGB))+
+    theme_envnoy()
+  #envplot_elv
+  envplot_preci <- ggplot(rufienv, aes(x=WsBio12Av)) + 
+    geom_vline(data=gagesenvrec, aes(xintercept=WsBio12Av, color=select),alpha=0.5, size=0.75) +
+    geom_histogram(bins=50,fill='#1f78b4', alpha=0.4) + 
+    scale_x_continuous(name=expression('Upstream mean annual precipitation (mm)'),
+                       expand=c(0,0)) +
+    scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
+    theme(axis.title.y=element_blank()) +
+    scale_color_manual(values=c(notselRGB,selRGB))+
+    theme_envnoy()
+  #envplot_preci
+  
+  
+  envplot_watext <- ggplot(rufienv, aes(x=100*CatWatExt)) + 
+    geom_vline(data=gagesenvrec, aes(xintercept=100*CatWatExt, color=select),alpha=0.5, size=0.75) +
+    geom_histogram(bins=50,fill='#35978f', alpha=0.4) + 
+    scale_x_continuous(name=expression('Catchment max. water extent 1984-2015 (% area)'),
+                       expand=c(0,0)) +
+    scale_y_continuous(trans='sqrt',name='Number of reaches',expand=c(0,0)) + 
+    scale_color_manual(values=c(notselRGB,selRGB))+
+    theme_env()
+  #envplot_watext
+  rufienv$CatGeolMaj <- factor(rufienv$CatGeolMaj, levels = unique(rufienv$CatGeolMaj[order(as.numeric(as.character(rufienv$CatGeolMaj)))]))
+  envplot_geol <-  ggplot(rufienv, aes(x=CatGeolMaj)) + 
+    geom_bar(fill='#8c510a', alpha=0.4, stat='count') +
+    geom_bar(data=gagesenvrec, aes(color=select),fill='white',alpha=0.4, size=0.75) +
+    scale_x_discrete(name=expression('Main catchment lithology (GMIS number)')) +
+    scale_y_continuous(trans='log10',name='Number of reaches') + 
+    scale_color_manual(values=c(notselRGB,selRGB))+
+    theme_envnoy() +
+    theme(axis.text.x = element_text(angle = 45, hjust=1))
+  #envplot_geol
+  envplot_pop <- ggplot(rufienv, aes(x=CatPopDen)) + 
+    geom_vline(data=gagesenvrec, aes(xintercept=CatPopDen, color=select),alpha=0.5, size=0.75) +
+    geom_histogram(bins=50,fill='#4d9221', alpha=0.4) + 
+    scale_x_log10(name=expression('Catchment population density'~(persons/km^2)),
+                  breaks=c(1,5,10,50,100,1000),
+                  expand=c(0,0)) +
+    scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
+    scale_color_manual(values=c(notselRGB,selRGB))+
+    theme_envnoy()
+  #envplot_pop
+  
+  
+  envplot_forlos <- ggplot(rufienv, aes(x=100*WsFLosSum_)) + 
+    geom_vline(data=gagesenvrec, aes(xintercept=100*WsFLosSum_, color=select),alpha=0.5, size=0.75) +
+    geom_histogram(bins=50,fill='#bf812d', alpha=0.6) + 
+    scale_x_sqrt(name=expression('Upstream forest loss (% area)'),
+                 breaks=c(0,1,5,10,25,50,75,100),
+                 expand=c(0,0)) +
+    scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
+    scale_color_manual(values=c(notselRGB,selRGB))+
+    theme_env()
+  #envplot_forlos
+  envplot_urb <- ggplot(rufienv, aes(x=100*LCSum_89)) + 
+    geom_vline(data=gagesenvrec, aes(xintercept=100*LCSum_89, color=select),alpha=0.5, size=0.75) +
+    geom_histogram(bins=50,fill='#cab2d6', alpha=0.4) + 
+    scale_x_continuous(trans='log10',
+                       name='Upstream urban area (% area)',
+                       breaks = c(0.001,0.01,0.1,1,10),
+                       labels= c(0.001,0.01,0.1,1,10),
+                       expand=c(0,0)) +
+    scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
+    scale_color_manual(values=c(notselRGB,selRGB))+
+    theme_envnoy()
+  #envplot_urb
+  envplot_resind <- ggplot(rufienv, aes(x=100*WsResInd)) + 
+    geom_vline(data=gagesenvrec, aes(xintercept=100*WsResInd, color=select),alpha=0.5, size=0.75) +
+    geom_histogram(bins=50,fill='#de77ae', alpha=0.4) + 
+    scale_x_continuous(name=expression('Percentage of watershed draining from a reservoir'),
+                       expand=c(0,0)) +
+    scale_y_log10(name='Number of reaches',expand=c(0,0),
+                  breaks = trans_breaks("log10", function(x) 10^x),
+                  labels = trans_format("log10", math_format(10^.x))) + 
+    scale_color_manual(values=c(notselRGB,selRGB))+
+    theme_envnoy()
+  #envplot_resind
+  #plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
+  
+  png(file.path(outdir,plotname),width=20, height=12,units='in',res=300)
+  plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
+  dev.off()
+}
+envplot(gageselect1991, 'gage_env1991.png')
 
-
-envplot_forlos <- ggplot(rufienv, aes(x=100*WsFLosSum_)) + 
-  geom_vline(data=gagesenvrec, aes(xintercept=100*WsFLosSum_, color=select),alpha=0.5, size=0.75) +
-  geom_histogram(bins=50,fill='#bf812d', alpha=0.6) + 
-  scale_x_sqrt(name=expression('Upstream forest loss (% area)'),
-               breaks=c(0,1,5,10,25,50,75,100),
-               expand=c(0,0)) +
-  scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
-  scale_color_manual(values=c(notselRGB,selRGB))+
-  theme_env()
-#envplot_forlos
-envplot_urb <- ggplot(rufienv, aes(x=100*LCSum_89)) + 
-  geom_vline(data=gagesenvrec, aes(xintercept=100*LCSum_89, color=select),alpha=0.5, size=0.75) +
-  geom_histogram(bins=50,fill='#cab2d6', alpha=0.4) + 
-  scale_x_continuous(trans='log10',
-                     name='Upstream urban area (% area)',
-                     breaks = c(0.001,0.01,0.1,1,10),
-                     labels= c(0.001,0.01,0.1,1,10),
-                     expand=c(0,0)) +
-  scale_y_continuous(name='Number of reaches',expand=c(0,0)) + 
-  scale_color_manual(values=c(notselRGB,selRGB))+
-  theme_envnoy()
-#envplot_urb
-envplot_resind <- ggplot(rufienv, aes(x=100*WsResInd)) + 
-  geom_vline(data=gagesenvrec, aes(xintercept=100*WsResInd, color=select),alpha=0.5, size=0.75) +
-  geom_histogram(bins=50,fill='#de77ae', alpha=0.4) + 
-  scale_x_continuous(name=expression('Percentage of watershed draining from a reservoir'),
-                     expand=c(0,0)) +
-  scale_y_log10(name='Number of reaches',expand=c(0,0),
-                breaks = trans_breaks("log10", function(x) 10^x),
-                labels = trans_format("log10", math_format(10^.x))) + 
-  scale_color_manual(values=c(notselRGB,selRGB))+
-  theme_envnoy()
-#envplot_resind
-#plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
-
-png(file.path(outdir,'gage_env20180403.png'),width=20, height=12,units='in',res=300)
-plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
-dev.off()
 
 #####################################################
 #In multidimensional environment
