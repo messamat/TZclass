@@ -30,10 +30,11 @@ library(rpart)
 library(rpart.plot)
 library(ggplot2)
 library(ggdendro)
+
+rootdir="F:/Tanzania/Tanzania" #UPDATE
 source(file.path(rootdir,"bin/outside_src/Biostats.R"))
 source(file.path(rootdir,"bin/outside_src/Flowscreen.hyear.internal.R"))
 
-rootdir="F:/Tanzania/Tanzania" #UPDATE
 setwd(file.path(rootdir,"results")) 
 datadir = file.path(getwd(),'rufiji_hydrodatafilter') #UPDATE
 origdatadir = file.path(rootdir,"data") 
@@ -65,14 +66,14 @@ predsmelt <- merge(predsmelt, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
 predsmelt <- merge(predsmelt, rufidat_post1991, by='ID',all.x=T)
 predsmelt <- merge(predsmelt, rufidat_o15y, by='ID',all.x=T)
 
-rufidat_select <- predsmelt[predsmelt$gap_per<=0.1 & (predsmelt$ycount_o15>=15 | predsmelt$ycount1991>=10) & predsmelt$hyear<2017,]
-str(rufidat_select)
+############################################### Compute hydrologic metrics##########################################
 
-#####################################################################################
-# Compute hydrologic metrics
 allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", floodquantile=0.95) {
   #Get template
-  HITall_template <- singleHITcomp(dfhydro, dfenv, templateID)
+  dailyQClean <- validate_data(dfhydro[dfhydro$ID==templateID,c("Date", "Flow")], yearType="water")
+  #Calculate all hit stats
+  HITall_template <- calc_allHIT(dailyQClean, yearType="water", stats=hstats, digits=10, pref="mean",
+                                drainArea=dfenv[dfenv$RGS_No==templateID,'WsArea'], floodThreshold = quantile(dailyQClean$discharge, floodquantile))
   colnames(HITall_template)[2] <- templateID
   HITall <- data.frame(indice=HITall_template$indice) 
   #Compute metrics for all gages
@@ -80,27 +81,29 @@ allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", f
     print(gage)
     try({
       #Check data for completeness
-      dailyQClean <- validate_data(dfhydro[dfhydro$ID==gageID,c("Date", "Flow")], yearType="water")
+      dailyQClean <- validate_data(dfhydro[dfhydro$ID==gage,c("Date", "Flow")], yearType="water")
       #Calculate all hit stats
       calc_allHITout <- calc_allHIT(dailyQClean, yearType="water", stats=hstats, digits=10, pref="mean",
-                                    drainArea=dfenv[dfenv$RGS_No==gageID,'WsArea'], floodThreshold = quantile(dailyQClean$discharge, floodquantile))
+                                    drainArea=dfenv[dfenv$RGS_No==gage,'WsArea'], floodThreshold = quantile(dailyQClean$discharge, floodquantile))
       colnames(calc_allHITout)[2] <- gage
       HITall <- merge(HITall, calc_allHITout, by='indice')
     })
   }
-  HITall_formatmelt <-melt(setDT(HITall), id.vars = "indice",variable.name = "ID") 
+  HITall_formatmelt <-melt(setDT(HITall), id.vars = "indice",variable.name = gageID) 
   HITall_formatmelt[is.infinite(HITall_formatmelt$value),'value'] <- NA
   HITall_formatmelt[is.nan(HITall_formatmelt$value),'value'] <- NA
   return(HITall_formatmelt)
 }
-HITpost1991 <- allHITcomp(rufidat_select, gagesenv, 'ID')
-
 #Calculate mag7 stats
 #magnifStatsOut <- calc_magnifSeven(dailyQClean,yearType="water",digits=3)
 
-#######################################################################################
-# Box plot of metrics
-HITallbox<- HITall_formatmelt
+rufidat_select1991 <- predsmelt[predsmelt$gap_per<=0.1 &  predsmelt$ycount1991>=10 & predsmelt$hyear>=1991 & predsmelt$hyear<2017,]
+HITpost1991 <- allHITcomp(as.data.frame(rufidat_select1991), gagesenv, 'ID')
+rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$hyear<2017 &  predsmelt$ycount_o15>=15,]
+HITo15y <- allHITcomp(as.data.frame(rufidat_select), gagesenv, 'ID')
+
+############################################### Box plot of metrics##############################
+HITallbox<- HITpost1991
 HITallbox$group1 <- as.factor(substr(HITall_formatmelt$indice,1,1))
 HITallbox$group2 <- as.factor(substr(HITall_formatmelt$indice,2,2))
 HITallbox$indice_sub <- substr(HITall_formatmelt$indice,3,5)
@@ -123,7 +126,7 @@ HITallboxplot <-ggplot(HITallbox, aes(x=indice_sub, y=value, color=group1)) +
         axis.text.y = element_text(size=16),
         strip.text = element_text(size = 15.5),
         legend.position='none')
-png(file.path(outdir,'HITallboxplot.png'),width=20, height=12,units='in',res=300)
+png(file.path(outdir,'HITallboxplotpost1991.png'),width=20, height=12,units='in',res=300)
 HITallboxplot
 dev.off()
 
@@ -133,8 +136,7 @@ dev.off()
 
 #####################Format data to use in classification and compute Gower's distance############
 HITdist <- function(HITdf, gagelist) {
-  HITdfsel <- HITdf[HITdf$ID %in% gagelist,]
-  HITdf_format <- dcast(HITdfsel, ID ~ indice)
+  HITdf_format <- dcast(HITdf, ID ~ indice)
   HITdf_format <- merge(HITdf_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
   dimindices <- c('ma1','ma2',paste('ma',seq(12,23),sep=''),paste('ml',seq(1,12),sep=''),paste('mh',seq(1,12),sep=''), 
                   paste('dl',seq(1,5),sep=''),paste('dh',seq(1,5),sep=''),'ra1','ra3','ra6','ra7') #List of dimensional indices from Kennen et al. 2007
@@ -148,7 +150,7 @@ HITdist <- function(HITdf, gagelist) {
 
 ########################################CLASSIFICATION BASED ON POST-1991 > 10 YEARS OF DATA ################################
 ########################################Classify based on raw indices############################################
-gaugegow1991 <- HITdist(HITall_formatmelt, unique(rufidat_post1991[rufidat_post1991$ycount1991>=10,'ID']))
+gaugegow1991 <- HITdist(HITpost1991)
 gaugecla_ward <-hclust(gaugegow1991, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 
 #Diagnostics
