@@ -59,12 +59,12 @@ rufidat_clean<-hyear.internal(rufidat_clean,hyrstart=10) #Ignore hdoy
 
 rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
 
-#rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltab.dbf'))
-#numcol <- colnames(rufienv)[which(sapply(rufienv, is.numeric))]
-#maxcol <-adply(rufienv[,numcol],2,max)
-#incol <- colnames(rufienv)[!(colnames(rufienv) %in% maxcol[maxcol$V1==0,'X1'])]
-#rufienv <- rufienv[,incol] #Take out all 0 columns
-#write.dbf(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
+# rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltab.dbf'))
+# numcol <- colnames(rufienv)[which(sapply(rufienv, is.numeric))]
+# sumcol <-adply(rufienv[,numcol],2,function(x) sum(x, na.rm=T))
+# incol <- colnames(rufienv)[!(colnames(rufienv) %in% sumcol[sumcol$V1==0,'X1'])]
+# rufienv <- rufienv[,incol] #Take out all 0 columns
+# write.dbf(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
 rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
 
 #gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
@@ -494,8 +494,6 @@ envplot(gageselect_o15y, 'gage_envo15y.png')
 gageselect_o15y[which(!(gageselect_o15y$ID %in% gageselect1991$ID)),]
 
 ##################################In multidimensional environment####################
-
-
 #Make subset of data
 colnames(rufienv)
 outcols <- c(1:4,6,7,9,45:70,92:112, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
