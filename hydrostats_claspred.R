@@ -50,6 +50,7 @@ rufidat_impute <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.c
 colnames(rufidat_impute)[2:(ncol(rufidat_impute))] <- substr(colnames(rufidat_impute),2,10)[2:(ncol(rufidat_impute))]
 rufidat_gapsummary <- read.csv(file.path(datadir, 'rufidat_gapsummary.csv'))
 rufidat_post1991<-read.csv(file.path(datadir, 'gageselect_post1991comp90.csv'))
+rufidat_o15y<-read.csv(file.path(datadir, 'gageselect_o15comp90.csv'))
 
 gagesenv <- read.dbf(file.path(getwd(),'gages_netjoinclean.dbf'))
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
@@ -62,39 +63,40 @@ predsmelt$month <- as.numeric(format(predsmelt$Date, "%m"))
 predsmelt<-hyear.internal(predsmelt,hyrstart=10) #Ignore hdoy
 predsmelt <- merge(predsmelt, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
 predsmelt <- merge(predsmelt, rufidat_post1991, by='ID',all.x=T)
+predsmelt <- merge(predsmelt, rufidat_o15y, by='ID',all.x=T)
 
-rufidat_select <- predsmelt[predsmelt$hyear>=1991 & predsmelt$hyear<2017 & predsmelt$ycount>=10 & predsmelt$gap_per<=0.1,]
+rufidat_select <- predsmelt[predsmelt$gap_per<=0.1 & (predsmelt$ycount_o15>=15 | predsmelt$ycount1991>=10) & predsmelt$hyear<2017,]
 str(rufidat_select)
 
 #####################################################################################
 # Compute hydrologic metrics
-HITcomp <- function(dfhydro, dfenv, gageID, hstats="all", floodquantile=0.95) {
-  #Check data for completeness
-  dailyQClean <- validate_data(dfhydro[dfhydro$ID==gageID,c("Date", "Flow")], yearType="water")
-  #Calculate all hit stats
-  calc_allHITout <- calc_allHIT(dailyQClean, yearType="water", stats=hstats, digits=10, pref="mean",
-                                drainArea=dfenv[dfenv$RGS_No==gageID,'WsArea'], floodThreshold = quantile(dailyQClean$discharge, floodquantile))
-  return(calc_allHITout)
+allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", floodquantile=0.95) {
+  #Get template
+  HITall_template <- singleHITcomp(dfhydro, dfenv, templateID)
+  colnames(HITall_template)[2] <- templateID
+  HITall <- data.frame(indice=HITall_template$indice) 
+  #Compute metrics for all gages
+  for (gage in unique(dfhydro[,gageID])) {
+    print(gage)
+    try({
+      #Check data for completeness
+      dailyQClean <- validate_data(dfhydro[dfhydro$ID==gageID,c("Date", "Flow")], yearType="water")
+      #Calculate all hit stats
+      calc_allHITout <- calc_allHIT(dailyQClean, yearType="water", stats=hstats, digits=10, pref="mean",
+                                    drainArea=dfenv[dfenv$RGS_No==gageID,'WsArea'], floodThreshold = quantile(dailyQClean$discharge, floodquantile))
+      colnames(calc_allHITout)[2] <- gage
+      HITall <- merge(HITall, calc_allHITout, by='indice')
+    })
+  }
+  HITall_formatmelt <-melt(setDT(HITall), id.vars = "indice",variable.name = "ID") 
+  HITall_formatmelt[is.infinite(HITall_formatmelt$value),'value'] <- NA
+  HITall_formatmelt[is.nan(HITall_formatmelt$value),'value'] <- NA
+  return(HITall_formatmelt)
 }
-#Get template
-HITall_template <- HITcomp(rufidat_select, gagesenvrec, '1KA9')
-colnames(HITall_template)[2] <- '1KA9'
-HITall <- data.frame(indice=HITall_template$indice) 
-#Compute metrics for all gages
-for (gage in unique(rufidat_select$ID)) {
-  print(gage)
-  try({
-    calc_allHITout <- HITcomp(rufidat_select, gagesenvrec, gage)
-    colnames(calc_allHITout)[2] <- gage
-    HITall <- merge(HITall, calc_allHITout, by='indice')
-  })
-}
+HITpost1991 <- allHITcomp(rufidat_select, gagesenv, 'ID')
 
 #Calculate mag7 stats
 #magnifStatsOut <- calc_magnifSeven(dailyQClean,yearType="water",digits=3)
-HITall_formatmelt <-melt(setDT(HITall), id.vars = "indice",variable.name = "ID") 
-HITall_formatmelt[is.infinite(HITall_formatmelt$value),'value'] <- NA
-HITall_formatmelt[is.nan(HITall_formatmelt$value),'value'] <- NA
 
 #######################################################################################
 # Box plot of metrics
@@ -129,28 +131,32 @@ dev.off()
 #HITallbox[!(HITallbox$indice_sub %in% seq(1,25,2)),'label'] <- ''
 #scale_x_discrete(name='Metric number (Appendix 1)',aes(breaks=indice_sub),labels = HITallbox$label)
 
-######################################################################
-#Format data to use in classification
-HITall_format <- dcast(HITall_formatmelt, ID ~ indice)
-HITall_format <- merge(HITall_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
-dimindices <- c('ma1','ma2',paste('ma',seq(12,23),sep=''),paste('ml',seq(1,12),sep=''),paste('mh',seq(1,12),sep=''), 
-                paste('dl',seq(1,5),sep=''),paste('dh',seq(1,5),sep=''),'ra1','ra3','ra6','ra7') #List of dimensional indices from Kennen et al. 2007
-HITall_format <- as.data.frame(HITall_format[,(dimindices) := lapply(.SD, function(x) round(x/WsArea, digits=10)), .SDcols=dimindices]) #Standardize dimensional indices by drainage area
-row.names(HITall_format) <- HITall_format$ID
-HITall_format <- HITall_format[,-which(colnames(HITall_format) %in% c('ID','WsArea'))] #Get rid of non-indices columns
-HITall_stand <- data.stand(HITall_format[,2:(ncol(HITall_format))],method='standardize',margin='column',plot=F) #z-standardize columnwise 
-statHIT<- summary(HITall_stand)
-gauge_gow<- gowdis(HITall_stand, w=rep(1,ncol(HITall_stand)), asym.bin = NULL) #Compute Gower's distance so that missing values will not be taken in account
+#####################Format data to use in classification and compute Gower's distance############
+HITdist <- function(HITdf, gagelist) {
+  HITdfsel <- HITdf[HITdf$ID %in% gagelist,]
+  HITdf_format <- dcast(HITdfsel, ID ~ indice)
+  HITdf_format <- merge(HITdf_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
+  dimindices <- c('ma1','ma2',paste('ma',seq(12,23),sep=''),paste('ml',seq(1,12),sep=''),paste('mh',seq(1,12),sep=''), 
+                  paste('dl',seq(1,5),sep=''),paste('dh',seq(1,5),sep=''),'ra1','ra3','ra6','ra7') #List of dimensional indices from Kennen et al. 2007
+  HITdf_format <- as.data.frame(HITdf_format[,(dimindices) := lapply(.SD, function(x) round(x/WsArea, digits=10)), .SDcols=dimindices]) #Standardize dimensional indices by drainage area
+  row.names(HITdf_format) <- HITdf_format$ID
+  HITdf_format <- HITdf_format[,-which(colnames(HITdf_format) %in% c('ID','WsArea'))] #Get rid of non-indices columns
+  HITdf_stand <- data.stand(HITdf_format[,2:(ncol(HITdf_format))],method='standardize',margin='column',plot=F) #z-standardize columnwise 
+  gauge_gow<- gowdis(HITdf_stand, w=rep(1,ncol(HITdf_stand)), asym.bin = NULL) #Compute Gower's distance so that missing values will not be taken in account
+  return(gauge_gow)
+}
 
+########################################CLASSIFICATION BASED ON POST-1991 > 10 YEARS OF DATA ################################
 ########################################Classify based on raw indices############################################
-gaugecla_ward <-hclust(gauge_gow, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugegow1991 <- HITdist(HITall_formatmelt, unique(rufidat_post1991[rufidat_post1991$ycount1991>=10,'ID']))
+gaugecla_ward <-hclust(gaugegow1991, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 
 #Diagnostics
 hclus.table(gaugecla_ward)
 plot(gaugecla_ward, main="Ward's distance gauge cluster dendogram", xlab='Gauge ID', ylab="Gower's distance", hang=-1)   #par(mfrow=c(1,1))
 coef.hclust(gaugecla_ward) #Compute agglomerative coefficient
 cor(gauge_gow, cophenetic(gaugecla_ward)) #Compute cophenetic coefficient
-hclus.cophenetic(gauge_gow, gaugecla_ward) #Plot cophenetic relationship 
+hclus.cophenetic(gaugegow1991, gaugecla_ward) #Plot cophenetic relationship 
 hclus.scree(gaugecla_ward) #Check out scree plot
 plot(gaugecla_ward, main="Ward's distance gauge cluster dendogram", xlab='Gauge ID', ylab="Gower's distance", hang=-1)   #par(mfrow=c(1,1))
 rect.hclust(gaugecla_ward, k=5) #Draw rectangle around k classes
@@ -161,7 +167,14 @@ pvrect(clus.stab, alpha=0.90)
 #Get gauge classes
 classr5 <-cutree(gaugecla_ward, k=5)
 classr5_df <- data.frame(ID=names(classr5), gclass=classr5) 
-write.csv(classr5, file.path(outdir,'class_rawgow_ward_5.csv'))
+outdirclass <- file.path(outdir,'class1991_ward_raw')
+if (dir.exists(outdirclass )) {
+  print('Directory already exists')
+} else {
+  print(paste('Create new directory:',outdirclass))
+  dir.create(outdirclass )
+}
+write.csv(classr5, file.path(outdirclass,'class_rawgow_ward_5.csv'), row.names=F)
 #Boxplots
 HITall_new <- cbind(classr5,HITall_format)
 #box.plots(HITall_new, by='classr5')
@@ -215,11 +228,18 @@ clus.stab <- pvclust(t(pcoa_scores), method.hclust='ward.D', method.dist='cor',u
 plot(clus.stab)
 pvrect(clus.stab, alpha=0.90)
 #Get gauge classes
+outdirclass <- file.path(outdir,'class1991_ward_pcoa')
+if (dir.exists(outdirclass )) {
+  print('Directory already exists')
+} else {
+  print(paste('Create new directory:',outdirclass))
+  dir.create(outdirclass )
+}
 classpc5 <-cutree(gaugecla_pcward, k=5)
-write.csv(classpc5, file.path(outdir,'class_pcoagow_ward_5.csv'))
+write.csv(classpc5, file.path(outdirclass,'class_pcoagow_ward_5.csv'))
 classpc6 <-cutree(gaugecla_pcward, k=6)
 classpc6_df <- data.frame(ID=names(classpc6), gclass=classpc6) 
-write.csv(gauge_classpc6, file.path(outdir,'class_pcoagow_ward_6.csv'))
+write.csv(gauge_classpc6, file.path(outdirclass,'class_pcoagow_ward_6.csv'))
 #Boxplots
 HITpcoa_new <- cbind(gauge_class,pcoa_scores)
 #box.plots(HITpcoa_new, by='gauge_class')
@@ -287,6 +307,49 @@ write.dbf(rufi_pc6r_pred[,c('GridID','gclass')], file.path(outdir, "class_ward_p
 
 
 
+
+
+
+
+
+
+
+
+######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
+########################################Classify based on raw indices############################################
+gaugegow_o15y <- HITdist(HITall_formatmelt, unique(rufidat_o15y[rufidat_o15y$ycount_o15>=15,'ID']))
+gaugecla_ward <-hclust(gaugegow_o15y, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
+
+#Diagnostics
+hclus.table(gaugecla_ward)
+plot(gaugecla_ward, main="Ward's distance gauge cluster dendogram", xlab='Gauge ID', ylab="Gower's distance", hang=-1)   #par(mfrow=c(1,1))
+coef.hclust(gaugecla_ward) #Compute agglomerative coefficient
+cor(gaugegow_o15y, cophenetic(gaugecla_ward)) #Compute cophenetic coefficient
+hclus.cophenetic(gaugegow_o15y, gaugecla_ward) #Plot cophenetic relationship 
+hclus.scree(gaugecla_ward) #Check out scree plot
+plot(gaugecla_ward, main="Ward's distance gauge cluster dendogram", xlab='Gauge ID', ylab="Gower's distance", hang=-1)   #par(mfrow=c(1,1))
+rect.hclust(gaugecla_ward, k=5) #Draw rectangle around k classes
+#Test significance of classes
+clus.stab <- pvclust(t(HITall_stand), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
+plot(clus.stab)
+pvrect(clus.stab, alpha=0.90)
+#Get gauge classes
+classr5 <-cutree(gaugecla_ward, k=5)
+classr5_df <- data.frame(ID=names(classr5), gclass=classr5) 
+outdirclass <- file.path(outdir,'class1991_ward_raw')
+if (dir.exists(outdirclass )) {
+  print('Directory already exists')
+} else {
+  print(paste('Create new directory:',outdirclass))
+  dir.create(outdirclass )
+}
+write.csv(classr5, file.path(outdirclass,'class_rawgow_ward_5.csv'), row.names=F)
+#Boxplots
+HITall_new <- cbind(classr5,HITall_format)
+#box.plots(HITall_new, by='classr5')
+
+#rufidat_select_classr5 <- merge(rufidat_select, classr5_df, by="ID")
+#write.csv(rufidat_select_classr5, file.path(outdir, 'class_ward_raw/rufidat_select_classr5.csv'), row.names=F)
 
 
 
