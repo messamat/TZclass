@@ -338,7 +338,7 @@ plotflowscreen <- function(gage, div,thrs){ #make graphs of FlowScreen package o
 }
 for (g in unique(predsmelt$ID)) {
   plotseries(g)
-  #plotflowscreen(g,div=1,thrs=0.5)
+  plotflowscreen(g,div=1,thrs=0.5)
 }
 
 #'1KA41A':Kendall
@@ -349,6 +349,19 @@ for (g in unique(predsmelt$ID)) {
 #'1BK17A':BINSEG
 #'1KB4A': BINSEG
 #'1KA33B':error
+
+##################################Report statistics#######################
+mean(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
+min(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
+max(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
+"On average, gauges contained 40 years of daily discharge data (min = 2 years, max = 63 years)"
+
+mean(rufidat_gapsummary$gap_per)
+min(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
+max(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
+"The average percentage of missing data per year across all gauges was 15% (min=2%, max=59%)." 
+
+mean(rufidat_select_o15y$ycount_o15)
 
 #####################################################################
 #Assess representativity of gages regarding environmental variables
