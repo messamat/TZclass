@@ -53,6 +53,10 @@ get_legend<-function(myggplot){
 }
 
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
+rufidat_clean$year <- as.numeric(format(rufidat_clean$Date, "%Y"))
+rufidat_clean$month <- as.numeric(format(rufidat_clean$Date, "%m"))
+rufidat_clean<-hyear.internal(rufidat_clean,hyrstart=10) #Ignore hdoy
+
 rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
 
 #rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltab.dbf'))
@@ -73,30 +77,10 @@ gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_
 
 ##########################################
 #BUild summary tables
-rufidat_clean$year <- as.numeric(format(rufidat_clean$Date, "%Y"))
-rufidat_clean$month <- as.numeric(format(rufidat_clean$Date, "%m"))
-rufidat_clean<-hyear.internal(rufidat_clean,hyrstart=10) #Ignore hdoy
-
 rufidat_dt <- data.table(rufidat_clean)
 
 rufidat_datesummary <- rufidat_dt[,list(length(unique(ID))), .(Date)] #Compute number of gages with data for each date
 rufidat_clean$ID <- factor(rufidat_clean$ID, levels = unique(rufidat_clean$ID[order(rufidat_clean$Date)]))
-
-#Make sure that the legend gets to the maximum
-record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
-  geom_point(size=2) +
-  geom_bar(data=rufidat_datesummary, aes(x=Date,y='1KB36',color=V1), stat='identity') +
-  geom_point(size=2) +
-  scale_x_date(breaks=as.Date(paste(c(seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
-  scale_y_discrete(name='Gauge ID') + 
-  scale_colour_distiller(name='Number of gauges',palette='Spectral',breaks=c(5,10,15,20,max(rufidat_datesummary$V1)),
-                         limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
-  theme_classic() + 
-  theme(text=element_text(size=24),
-        axis.text.x = element_text(angle = 45, hjust=1))
-# png(file.path(outdir,'record_overview20180403.png'),width = 20, height=12,units='in',res=300)
-# print(record_overview)
-# dev.off()
 
 #Compute length of gap between current daily record and previous record both within and between years for each date and gage
 rufidat_dt[, prevdate := ifelse(data.table::shift(ID, 1L, type="lag")==ID, 
@@ -125,6 +109,22 @@ rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(hye
                                        max_gap = max(gapyr,na.rm=T))
                                  ,.(ID,hyear)]
 #write.csv(rufidat_gapsummary, file.path(outdir, 'rufidat_gapsummary.csv'), row.names=F)
+
+##################################Overall figure of record
+record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
+  geom_point(size=2) +
+  geom_bar(data=rufidat_datesummary, aes(x=Date,y='1KB36',color=V1), stat='identity') +
+  geom_point(size=2) +
+  scale_x_date(breaks=as.Date(paste(c(seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
+  scale_y_discrete(name='Gauge ID') + 
+  scale_colour_distiller(name='Number of gauges',palette='Spectral',breaks=c(5,10,15,20,max(rufidat_datesummary$V1)),
+                         limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
+  theme_classic() + 
+  theme(text=element_text(size=24),
+        axis.text.x = element_text(angle = 45, hjust=1))
+# png(file.path(outdir,'record_overview20180403.png'),width = 20, height=12,units='in',res=300)
+# print(record_overview)
+# dev.off()
 
 #################################################
 #Compute number of valid years on record depending on the percentage of missing data tolerated to consider a year valid
@@ -256,9 +256,7 @@ predsmelt <- predsmelt[,c(2,1,3)]
 predsmelt$SYM <- NA
 predsmelt$Agency <- NA
 
-########################################
-#Get example legend
-########################################
+##################################Get example legend ######
 gage='1KA9'
 print(gage)
 genv <- gagesenv[gagesenv$RGS_No==gage,]
@@ -269,7 +267,7 @@ gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Selected data from 199
 
 #Make raw time series plot
 template <-ggplot() +
-  geom_point(data=gts_sel[gts_sel], aes(x=Date, y=Flow, color='brown'), size=1.5) + 
+  geom_point(data=gts_sel, aes(x=Date, y=Flow, color='brown'), size=1.5) + 
   geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow,color='red'), size=1.5)+
   geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow,color='lightblue'), size=1.5)+
   geom_point(data=rufidat_clean[rufidat_clean$ID==gage&rufidat_clean$hyear>=1991&
@@ -287,7 +285,7 @@ print(template)
 #Get legend as a grob
 legendts <- get_legend(template)
 
-##########################################Plot 'em
+##################################Plot 'em #############
 plotseries <- function(gage){ #Make a graph of a time series highlightinh delete, interpolated, used and non-used data
   print(gage)
   genv <- gagesenv[gagesenv$RGS_No==gage,]
@@ -355,9 +353,8 @@ for (g in unique(predsmelt$ID)) {
 #####################################################################
 #Assess representativity of gages regarding environmental variables
 #####################################################################
+##################################With individual variable plots##################
 
-################################
-#With individual variable plots
 theme_env <- function () { 
   theme_classic(base_size=18) %+replace% 
     theme(
@@ -496,9 +493,9 @@ envplot(gageselect_o15y, 'gage_envo15y.png')
 
 gageselect_o15y[which(!(gageselect_o15y$ID %in% gageselect1991$ID)),]
 
-#####################################################
-#In multidimensional environment
-#######################################################
+##################################In multidimensional environment####################
+
+
 #Make subset of data
 colnames(rufienv)
 outcols <- c(1:4,6,7,9,45:70,92:112, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
