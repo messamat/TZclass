@@ -47,6 +47,8 @@ rufidat_cast <- dcast(rufidat_clean, Date~ID, value.var='Flow')
 na.lomf <- function(x) {
   if (length(x) > 0) {
     non.na.idx <- which(!is.na(x))
+    if(is.na(x[1]))
+      non.na.idx=c(1,non.na.idx)
     rep.int(non.na.idx, diff(c(non.na.idx, length(x) + 1))) #Repeat index of previous row with non-NA as many times gap until next non-NA values
   }
 }
@@ -55,6 +57,8 @@ na.lomf <- function(x) {
 na.lomb <- function(x) {
   if (length(x) > 0) {
     non.na.idx <- which(!is.na(x))
+    if(is.na(x[length(x)]))
+      non.na.idx=c(non.na.idx,length(x))
     y<-rep(NA,length(x))
     y[non.na.idx] <- non.na.idx
     zoo::na.locf(y, fromLast = TRUE)
@@ -67,24 +71,26 @@ na.lomb <- function(x) {
 #maxgap: maximum gap length to be imputed
 #Example values to test function:
 #1KB8B, 1KB24, 1KB14A, 1KB50B, 1KA31, 1KA21A still have missing data
-  # tscast=rufidat_cast
-  # sn=8
-  # maxgap=180
+  tscast=rufidat_cast
+  sn=34
+  maxgap=180
 CustomImpute <- function(tscast, sn, maxgap) {
   if (sn > 1) {
     name<- colnames(tscast)[sn]
     print(name)
     #Restrict analysis to min and max year of records
-    mindate <- tscast[min(which(!is.na(tscast[,sn]))),'Date']
-    maxdate <- tscast[max(which(!is.na(tscast[,sn]))),'Date']
+    mindate <- tscast[min(which(!is.na(tscast[,sn]))),'Date']-37
+    maxdate <- tscast[max(which(!is.na(tscast[,sn]))),'Date']+37
     tscastsub <- tscast[tscast$Date>mindate & tscast$Date<maxdate,]
     #Compute size of gap a record belongs to
     tscastsub$prevdate <- tscastsub[na.lomf(tscastsub[,sn]),'Date']
     tscastsub$nextdate <- tscastsub[na.lomb(tscastsub[,sn]),'Date']
+    tscastsub$prevgap <- as.numeric(tscastsub$Date-as.Date(tscastsub$prevdate))
+    tscastsub$nextgap <- as.numeric(as.Date(tscastsub$nextdate)-tscastsub$Date)
     tscastsub$gap <- as.numeric(as.Date(tscastsub$nextdate)-as.Date(tscastsub$prevdate))
     tscastsub <- as.data.frame(tscastsub)
     #Only use data from stream gauges that have at least 50% of overlapping non-NA data with that streamgauge
-    overlap <- adply(tscastsub[!is.na(tscastsub[,sn]),-c(1,sn,ncol(tscastsub)-c(0,1,2))],2,function(x) {
+    overlap <- adply(tscastsub[!is.na(tscastsub[,sn]),-c(1,sn,ncol(tscastsub)-c(0,1,2,3,4))],2,function(x) {
       length(which(!is.na(x)))/length(which(!is.na(tscastsub[,sn])))
       })
     covar <- which(colnames(tscastsub)%in%overlap[overlap$V1>=0.5,'X1'])
@@ -96,8 +102,8 @@ CustomImpute <- function(tscast, sn, maxgap) {
     #fit <- auto.arima(ts(tscastsub[,sn],frequency=365),D=1, approximation=F)
     #xreg=ts(tscastsub[,covar], frequency=365)
     #summary(fit)
-    id.na <- which((tscastsub$gap<=maxgap &
-                      is.na(tscastsub[,sn])))
+    id.na <- which((tscastsub$gap<=maxgap | tscastsub$prevgap<=maxgap/2 | tscastsub$nextgap<=maxgap/2) &
+                      is.na(tscastsub[,sn]))
     #Kalman smoother
     kr <- KalmanSmooth(tscastsub[,sn], fit$model)
     for (i in id.na)
@@ -150,10 +156,10 @@ CustomImpute_nainterp <- function(tscast, sn, maxgap,pplot) {
     pred_try
   }
 }
-int1KA15A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KA15A'),180,pplot=T)
+int1KA15A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KA15A'),maxgap=180,pplot=T)
 impute_preds[impute_preds$Date>=min(int1KA15A$Date) & impute_preds$Date<=max(int1KA15A$Date),
              which(colnames(impute_preds)=='1KA15A')] <- int1KA15A$pred
-int1KB14A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KB14A'),180,pplot=T)
+int1KB14A <-CustomImpute_nainterp(rufidat_cast, which(colnames(rufidat_cast)=='1KB14A'),maxgap=180,pplot=T)
 impute_preds[impute_preds$Date>=min(int1KB14A$Date) & impute_preds$Date<=max(int1KB14A$Date),
              which(colnames(impute_preds)=='1KB14A')] <- int1KB14A$pred
 
