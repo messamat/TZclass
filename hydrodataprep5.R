@@ -67,10 +67,10 @@ rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses
 # write.dbf(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
 rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
 
-#gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
-#incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% maxcol[maxcol$V1==0,'X1'])] #Take out columns with only 0 values
-#gagesenv <- gagesenv[,incol] #Take out all 0 columns
-#write.dbf(gagesenv, file.path(getwd(),'gages_netjoinclean.dbf'))
+# gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
+# incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
+# gagesenv <- gagesenv[,incol] #Take out all 0 columns
+# write.dbf(gagesenv, file.path(getwd(),'gages_netjoinclean.dbf'))
 gagesenv <- read.dbf(file.path(getwd(),'gages_netjoinclean.dbf'))
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
 #write.dbf(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180330.dbf'))
