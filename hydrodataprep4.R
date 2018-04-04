@@ -21,16 +21,16 @@ library(forecast)
 library(imputeTS)
 
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
-datadir = file.path(getwd(),paste('rufiji_hydrodatainspect','20180326',sep='_')) #UPDATE
+datadir = file.path(getwd(),'rufiji_hydrodatainspect') #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
-outdir=file.path(getwd(),'rufiji_hydrodataimpute_20180329')
+outdir=file.path(getwd(),'rufiji_hydrodataimpute')
 if (dir.exists(outdir)) {
   print('Directory already exists')
 } else {
   print(paste('Create new directory:',outdir))
   dir.create(outdir)
 }
-rufidat <- read.csv(file.path(getwd(),'rufiji_hydrodataraw_20180324','ZTE_rufidat.csv'),colClasses = c('character','character','Date','numeric','numeric','factor','factor','factor'))
+rufidat <- read.csv(file.path(getwd(),'rufiji_hydrodataraw','ZTE_rufidat.csv'),colClasses = c('character','character','Date','numeric','numeric','factor','factor','factor'))
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
 rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
 gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
@@ -159,7 +159,7 @@ impute_preds[impute_preds$Date>=min(int1KB14A$Date) & impute_preds$Date<=max(int
 
 
 write.csv(impute_preds, file.path(outdir, 'rufidat_interp.csv'), row.names=F)
-impute_preds <- read.csv(file.path('rufiji_hydrodataimpute_20180329', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
+impute_preds <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
 colnames(impute_preds)[2:(ncol(impute_preds))] <- substr(colnames(impute_preds),2,10)[2:(ncol(impute_preds))]
 
 #############################################################################################################
