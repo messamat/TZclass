@@ -18,7 +18,7 @@ library(prospectr) #for sg derivative
 library(dplyr)
 library(compare)
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
-datadir = file.path(getwd(),paste('rufiji_hydrodataraw','20180324',sep='_')) #UPDATE
+datadir = file.path(getwd(),'rufiji_hydrodataraw') #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
 
 #Function to remove spurious constant values
