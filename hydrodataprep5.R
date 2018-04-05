@@ -110,7 +110,7 @@ rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(hye
                                  ,.(ID,hyear)]
 #write.csv(rufidat_gapsummary, file.path(outdir, 'rufidat_gapsummary.csv'), row.names=F)
 
-##################################Overall figure of record############
+##################################Overall figure of record (record_overview)############
 record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
   geom_point(size=2) +
   geom_bar(data=rufidat_datesummary, aes(x=Date,y='1KB36',color=V1), stat='identity') +
@@ -122,9 +122,27 @@ record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
   theme_classic() + 
   theme(text=element_text(size=24),
         axis.text.x = element_text(angle = 45, hjust=1))
-# png(file.path(outdir,'record_overview20180403.png'),width = 20, height=12,units='in',res=300)
-# print(record_overview)
-# dev.off()
+png(file.path(outdir,'record_overview20180403.png'),width = 20, height=12,units='in',res=300)
+print(record_overview)
+dev.off()
+
+rufidat_cleanenv <- merge(rufidat_clean, gagesenv, by.x='ID', by.y='RGS_No')
+rufidat_cleanenv$label <- as.factor(paste(rufidat_cleanenv$RGS_Loc," at ", rufidat_cleanenv$RGS_Name,sep=""))
+rufidat_cleanenv$label <- factor(rufidat_cleanenv$label, levels = unique(rufidat_cleanenv$label[order(rufidat_cleanenv$Date)]))
+record_overview_name <-ggplot(data=rufidat_cleanenv, aes(x=Date, y=label)) +
+  geom_point(size=2) +
+  geom_bar(data=rufidat_datesummary, aes(x=Date,y='Mgugwe at Mgugwe',color=V1), stat='identity') +
+  geom_point(size=2) +
+  scale_x_date(breaks=as.Date(paste(c(seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
+  scale_y_discrete(name='Gauge name') + 
+  scale_colour_distiller(name='Number of gauges',palette='Spectral',breaks=c(5,10,15,20,max(rufidat_datesummary$V1)),
+                         limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
+  theme_classic() +
+  theme(text=element_text(size=20),
+        axis.text.x = element_text(angle = 45, hjust=1))
+png(file.path(outdir,'record_overview20180405_names.png'),width = 20, height=12,units='in',res=300)
+print(record_overview_name)
+dev.off()
 
 ##################################Gap plot################
 #Compute number of valid years on record depending on the percentage of missing data tolerated to consider a year valid
