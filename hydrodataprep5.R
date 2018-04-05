@@ -95,7 +95,7 @@ rufidat_dt[, nextdateyr := ifelse((data.table::shift(ID, 1L, type="lead")==ID) &
 rufidat_dt$gap <- as.numeric(as.Date(rufidat_dt$nextdate)-as.Date(rufidat_dt$prevdate))-2
 rufidat_dt$gapyr <- as.numeric(as.Date(rufidat_dt$nextdateyr)-as.Date(rufidat_dt$prevdateyr))-2
 
-###############################################
+############################################### summary statistics###################
 #Compute summary statistics in terms of amount of record, percentage of gaps, max length of gaps both
 #regarding entire record
 rufidat_summary <- rufidat_dt[,list(min_hyear=min(hyear), max_hyear=max(hyear), max_len=max(hyear)-min(hyear), 
@@ -110,7 +110,7 @@ rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(hye
                                  ,.(ID,hyear)]
 #write.csv(rufidat_gapsummary, file.path(outdir, 'rufidat_gapsummary.csv'), row.names=F)
 
-##################################Overall figure of record
+##################################Overall figure of record############
 record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
   geom_point(size=2) +
   geom_bar(data=rufidat_datesummary, aes(x=Date,y='1KB36',color=V1), stat='identity') +
@@ -126,7 +126,7 @@ record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
 # print(record_overview)
 # dev.off()
 
-#################################################
+##################################Gap plot################
 #Compute number of valid years on record depending on the percentage of missing data tolerated to consider a year valid
 rufidat_gapyear <- data.frame(ID=unique(rufidat_gapsummary$ID))
 for (i in seq(0.5,0,-0.1)) {
@@ -154,7 +154,7 @@ png(file.path(outdir,'gapplot20180403.png'),width = 12, height=12,units='in',res
 print(gapplot)
 dev.off()
 
-############################################################
+##################################################Overlapplot############
 #Now compute the number of gages as a function of record length and record overlap given that we only keep years with less than 10% of missing data
 max_yrgap <- 0.1
 dtoverlap <-rufidat_gapsummary[rufidat_gapsummary$gap_per<=0.1,]
@@ -210,8 +210,8 @@ dev.off()
 tryoverlap<-overlapplot[period_len>=25 & minyr>=10 & completeness>=0.5 & count>=15 & cyr>=1990 & cyr<=2018-15]
 print(tryoverlap)
 
-################################################
-#Visualize correlation among gages
+#################################Visualize correlation among gages########
+
 over5yr <- as.character(rufidat_gapyear[rufidat_gapyear$gagecount_gap_0.1>10,'ID']) #Only keep gages with at least 5 years of data (as otherwise correlation does not run)
 rufidat_clean$Flowlog <- log(rufidat_clean$Flow+0.01)
 rufidat_cast <- dcast(rufidat_clean[rufidat_clean$ID %in% over5yr,], Date~ID, value.var='Flowlog')
@@ -366,8 +366,7 @@ mean(rufidat_select_o15y$ycount_o15)
 #####################################################################
 #Assess representativity of gages regarding environmental variables
 #####################################################################
-##################################With individual variable plots##################
-
+##################################With individual variable plots#####
 theme_env <- function () { 
   theme_classic(base_size=18) %+replace% 
     theme(
