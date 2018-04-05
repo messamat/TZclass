@@ -29,6 +29,8 @@ library(adabag)
 library(rpart)
 library(rpart.plot)
 library(ggplot2)
+library(grid)
+library(gridExtra)
 library(ggdendro)
 
 rootdir="F:/Tanzania/Tanzania" #UPDATE
@@ -61,7 +63,11 @@ predsmelt <-melt(setDT(rufidat_impute),id.vars = 'Date',value.name='Flow',variab
 predsmelt <- predsmelt[,c(2,1,3)]
 predsmelt$year <- as.numeric(format(predsmelt$Date, "%Y"))
 predsmelt$month <- as.numeric(format(predsmelt$Date, "%m"))
-predsmelt<-hyear.internal(predsmelt,hyrstart=10) #Ignore hdoy
+predsmelt<-hyear.internal(predsmelt,hyrstart=10) #hdoy doesn't work?
+predsmelt$doy <- as.numeric(format(predsmelt$Date,"%j"))
+predsmelt[,hdoy:=ifelse(month>=10,
+                        doy-as.numeric(format(as.Date(paste(year,'-10-01',sep="")),"%j")),
+                        doy+as.numeric(format(as.Date(paste(year-1,'-12-31',sep="")),"%j"))-as.numeric(format(as.Date(paste(year-1,'-10-01',sep="")),"%j")))] #Compute hydrologic day
 predsmelt <- merge(predsmelt, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
 predsmelt <- merge(predsmelt, rufidat_post1991, by='ID',all.x=T)
 predsmelt <- merge(predsmelt, rufidat_o15y, by='ID',all.x=T)
@@ -172,8 +178,10 @@ gagesenv_format <- gagesenv[,c('RGS_No','GridID')]
 gagesenv_format <- merge(gagesenv_format,  rufienvsub_std, by='GridID')
 
 ########################################Format hydrologic metrics to use in classification and compute Gower's distance############
-HITdist <- function(HITdf, gagelist) {
-  HITdf$Value <- log(HITdf$Value+1)
+HITdist <- function(HITdf, logmetrics) {
+  if (logmetrics==TRUE){
+    HITdf$Value <- log(HITdf$Value+1)
+  }
   HITdf_format <- dcast(HITdf, ID ~ indice)
   HITdf_format <- merge(HITdf_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
   dimindices <- c('ma1','ma2',paste('ma',seq(12,23),sep=''),paste('ml',seq(1,12),sep=''),paste('mh',seq(1,12),sep=''), 
@@ -254,35 +262,114 @@ write.dbf(rufi_r5r_pred[,c('GridID','gclass')], file.path(outdir, "class_ward_ra
 
 ######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
 ########################################Classify based on raw indices############################################
-gaugegow_o15y <- HITdist(HITo15y)
+gaugegow_o15y <- HITdist(HITo15y, logmetrics=TRUE)
 gaugecla_ward <-hclust(gaugegow_o15y, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugecla_ward2 <-hclust(gaugegow_o15y, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugecla_UPGMA <-hclust(gaugegow_o15y, method='average') #Classify using hierarchical agglomerative using Ward's minimum variance method
 
 #Diagnostics
-hclus.table(gaugecla_ward)
-plot(gaugecla_ward, main="Ward's distance gauge cluster dendogram", xlab='Gauge ID', ylab="Gower's distance", hang=-1)   #par(mfrow=c(1,1))
-coef.hclust(gaugecla_ward) #Compute agglomerative coefficient
-cor(gaugegow_o15y, cophenetic(gaugecla_ward)) #Compute cophenetic coefficient
-hclus.cophenetic(gaugegow_o15y, gaugecla_ward) #Plot cophenetic relationship 
-hclus.scree(gaugecla_ward) #Check out scree plot
-plot(gaugecla_ward, main="Ward's distance gauge cluster dendogram", xlab='Gauge ID', ylab="Gower's distance", hang=-1)   #par(mfrow=c(1,1))
-rect.hclust(gaugecla_ward, k=6) #Draw rectangle around k classes
+cluster_diagnostic <- function(clusterres, clusname, gowdis) {
+  #hclus.table(clusterres)
+  coef.hclust(clusterres) #Compute agglomerative coefficient
+  #cor(gowdis, cophenetic(clusterres)) #Compute cophenetic coefficient
+  png(file.path(outdir, paste('o15y_r6r_cophe',clusname,'.png',sep="")), width=8, height=8, units='in',res=300)
+  hclus.cophenetic(gowdis, clusterres) #Plot cophenetic relationship 
+  dev.off()
+  png(file.path(outdir, paste('o15y_r6r_scree',clusname,'.png',sep="")), width=8, height=8, units='in',res=300)
+  hclus.scree(clusterres) #Check out scree plot
+  dev.off()
+  png(file.path(outdir, paste('o15y_r6r_dendogram',clusname,'.png',sep="")), width=8, height=8, units='in',res=300)
+  plot(clusterres, main=paste(clusname, "gauge cluster dendogram",sep=" "), xlab='Gauge ID', ylab="Gower's distance", hang=-1)   #par(mfrow=c(1,1))
+  rect.hclust(clusterres, k=4) #Draw rectangle around k classes
+  rect.hclust(clusterres, k=5) #Draw rectangle around k classes
+  rect.hclust(clusterres, k=6) #Draw rectangle around k classes
+  rect.hclust(clusterres, k=7) #Draw rectangle around k classes
+  rect.hclust(clusterres, k=8) #Draw rectangle around k classes
+  dev.off()
+}
+cluster_diagnostic(gaugecla_ward, "Ward's D", gaugegow_o15y)
+cluster_diagnostic(gaugecla_ward2, "Ward's D2", gaugegow_o15y)
+cluster_diagnostic(gaugecla_UPGMA, "UPGMA", gaugegow_o15y)
+#UPGMA leads to too much chaining, but Ward's D2 has higher cophenetic correlation (and in effect applies Ward's original algorithm)
+
 #Get gauge classes
-classr6 <-cutree(gaugecla_ward, k=6)
+classr6 <-cutree(gaugecla_ward2, k=6)
 classr6_df <- data.frame(ID=names(classr6), gclass=classr6) 
-outdirclass <- file.path(outdir,'classo15y_ward_raw')
+outdirclass <- file.path(outdir,'classo15y_ward2_raw')
 if (dir.exists(outdirclass )) {
   print('Directory already exists')
 } else {
   print(paste('Create new directory:',outdirclass))
   dir.create(outdirclass )
 }
-write.csv(classr6, file.path(outdirclass,'class_rawgow_ward_6.csv'), row.names=F)
-#Boxplots
-HITall_new <- cbind(classr6,HITo15y)
-#box.plots(HITall_new, by='classr6')
+write.csv(classr6_df, file.path(outdirclass,'class_rawgow_ward2_6.csv'), row.names=F)
 
-#rufidat_select_classr6 <- merge(rufidat_select_o15y, classr6_df, by="ID")
+######################################################## Class hydrograph plots ################
+rufidat_select_classr6 <- merge(rufidat_select_o15y, classr6_df, by="ID")
 #write.csv(rufidat_select_classr6, file.path(outdir, 'class_ward_raw/rufidat_select_classr6.csv'), row.names=F)
+setDT(rufidat_select_classr6)[,yrmean:=mean(Flow),.(ID,hyear)]
+classflowstats <- setDT(rufidat_select_classr6)[,list(classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .75,na.rm=T),
+                                                      classQ25=quantile(Flow/yrmean, .25,na.rm=T),classQ90=quantile(Flow/yrmean, .90,na.rm=T),
+                                                      classQ10=quantile(Flow/yrmean, .10,na.rm=T),classmax=max(Flow/yrmean,na.rm=T),
+                                                      classmin=min(Flow/yrmean,na.rm=T),classsd=sd(Flow/yrmean,na.rm=T), 
+                                                      cal_hdoy=format(as.Date(hdoy, origin='2015-10-01'), "%Y-%m-%d")),
+                                                .(gclass,hdoy)]
+
+
+classcol<- c('#1b9e77',"#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02")
+
+classhydro_all <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmean, color=factor(gclass))) + 
+  geom_line(size=1, alpha=0.8) + 
+  scale_color_manual(name='Hydrologic class',values=classcol) +
+  scale_y_continuous(name='Daily mean discharge/Mean daily discharge',expand=c(0,0),limits=c(0,NA)) + 
+  scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
+  theme_classic() + 
+  theme(legend.position='none',
+        text=element_text(size=18))
+
+classhydro_facet <-ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy))) + 
+  #geom_ribbon(aes(ymin=ifelse(classmean-2*classsd>=0,classmean-2*classsd,0), ymax=classmean+2*classsd,
+  #                fill=factor(gclass)),alpha=0.3) +
+  geom_ribbon(aes(ymin=classQ10, ymax=classQ90,
+                  fill=factor(gclass)),alpha=0.3) +
+  geom_line(aes(y=classmean, color=factor(gclass)),size=1.2) + 
+  facet_grid(gclass~.,scale='free_y') +
+  scale_color_manual(name='Hydrologic class',values=classcol) +
+  scale_fill_manual(name='Hydrologic class',values=classcol) +
+  scale_y_continuous(name='Daily mean discharge/Mean daily discharge',expand=c(0,0),limits=c(0,NA)) + 
+  scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
+  annotate("segment", x=as.Date('2015-10-01'), xend=as.Date('2016-09-30'), y=0, yend=0)+ 
+  theme_classic() +
+  theme(strip.background = element_blank(),
+        strip.text.y = element_blank(),
+        text=element_text(size=18))
+
+p1 <- ggplot_gtable(ggplot_build(classhydro_all))
+p2 <- ggplot_gtable(ggplot_build(classhydro_facet))
+lay= t(c(1,1,2,2))
+png(file.path(outdirclass,'6class_hydrograph.png'),width = 16, height=9,units='in',res=300)
+print(grid.arrange(p1,p2, ncol=2, layout_matrix = lay))
+dev.off()
+
+######################################################## Class boxplots ################
+merge(HITo15y, classr6_df, by="ID")
+HITallboxplot <-ggplot(HITo15y, aes(x=indice_sub, y=value, color=group1)) + 
+  scale_y_log10(name='Metric value') +
+  geom_boxplot() +
+  facet_grid(group2~group1, scales = "free", space="free_x") + 
+  scale_x_discrete(name='Metric number (Appendix 1)')+
+  theme_classic() +
+  theme(axis.title = element_text(size=16),
+        axis.text.y = element_text(size=16),
+        strip.text = element_text(size = 15.5),
+        legend.position='none')
+
+
+
+
+
+
+
 
 ########################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
 #Set #1
@@ -332,13 +419,13 @@ write.dbf(rufi_r6r_pred[,c('GridID','gclass')], file.path(outdirclass, "predict_
 
 ################################## DUMP #####################################
 # gaugecla_warddat <- dendro_data(as.dendrogram(gaugecla_ward), type='rectangle')
-# ggplot(segment(gaugecla_warddat)) + 
-#   geom_segment(aes(x = x, y = y, xend = xend, yend = yend)) + 
-#   geom_text(data = label(gaugecla_warddat), 
+# ggplot(segment(gaugecla_warddat)) +
+#   geom_segment(aes(x = x, y = y, xend = xend, yend = yend)) +
+#   geom_text(data = label(gaugecla_warddat),
 #             aes(x = x, y = y, label = label), vjust = -0.5, size = 3) +
-#   coord_flip() + 
+#   coord_flip() +
 #   scale_y_reverse(name="Gower's distance", expand = c(0.2, 0)) +
-#   scale_x_continuous(name='Gauge ID') + 
+#   scale_x_continuous(name='Gauge ID') +
 #   theme_classic() +
 #   theme(axis.text.y = element_blank(),
 #         axis.line.y = element_blank(),
