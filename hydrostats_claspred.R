@@ -32,6 +32,8 @@ library(ggplot2)
 library(grid)
 library(gridExtra)
 library(ggdendro)
+library(dendextend)
+library(dendroextras)
 
 rootdir="F:/Tanzania/Tanzania" #UPDATE
 source(file.path(rootdir,"bin/outside_src/Biostats.R"))
@@ -293,7 +295,7 @@ cluster_diagnostic(gaugecla_UPGMA, "UPGMA", gaugegow_o15y)
 #UPGMA leads to too much chaining, but Ward's D2 has higher cophenetic correlation (and in effect applies Ward's original algorithm)
 
 #Get gauge classes
-classr6 <-cutree(gaugecla_ward2, k=6)
+classr6 <-cutree(gaugecla_ward2, k=6,, order_clusters_as_data = FALSE)
 classr6_df <- data.frame(ID=names(classr6), gclass=classr6) 
 outdirclass <- file.path(outdir,'classo15y_ward2_raw')
 if (dir.exists(outdirclass )) {
@@ -303,6 +305,31 @@ if (dir.exists(outdirclass )) {
   dir.create(outdirclass )
 }
 write.csv(classr6_df, file.path(outdirclass,'class_rawgow_ward2_6.csv'), row.names=F)
+classcol<- c('#1b9e77',"#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02")
+
+######################################################## Dendogram plot#######################################
+#Get the dend
+dend <- as.dendrogram(gaugecla_ward2)
+png(file.path(outdirclass,'6class_dendrogram.png'),width = 8, height=8,units='in',res=300)
+par(mar=c(3,3,0,3)) #bottom left top right
+dend %>% set("branches_lwd", 2.5) %>% 
+  color_branches(k=6, col=classcol, groupLabels=T) %>% 
+  #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
+  color_labels(k=6, col=classcol) %>%
+  plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID",mgp=c(1.5,0.5,0))
+dev.off()
+
+gaugecla_ward2_name <- gaugecla_ward2
+gaugecla_ward2_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward2_name$labels,], paste(RGS_Loc," at ", RGS_Name,sep=""))
+dendname <- as.dendrogram(gaugecla_ward2_name)
+png(file.path(outdirclass,'6class_dendrogram_names.png'),width = 8, height=8,units='in',res=300)
+par(mar=c(3,3,0,17)) #bottom left top right
+dendname %>% set("branches_lwd", 2.5) %>% 
+  color_branches(k=6, col=classcol, groupLabels=T) %>% 
+  #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
+  color_labels(k=6, col=classcol) %>%
+  plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID",mgp=c(1.5,0.5,0))
+dev.off()
 
 ######################################################## Class hydrograph plots ################
 rufidat_select_classr6 <- merge(rufidat_select_o15y, classr6_df, by="ID")
@@ -314,9 +341,6 @@ classflowstats <- setDT(rufidat_select_classr6)[,list(classmean= mean(Flow/yrmea
                                                       classmin=min(Flow/yrmean,na.rm=T),classsd=sd(Flow/yrmean,na.rm=T), 
                                                       cal_hdoy=format(as.Date(hdoy, origin='2015-10-01'), "%Y-%m-%d")),
                                                 .(gclass,hdoy)]
-
-
-classcol<- c('#1b9e77',"#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02")
 
 classhydro_all <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmean, color=factor(gclass))) + 
   geom_line(size=1, alpha=0.8) + 
@@ -363,12 +387,6 @@ HITallboxplot <-ggplot(HITo15y, aes(x=indice_sub, y=value, color=group1)) +
         axis.text.y = element_text(size=16),
         strip.text = element_text(size = 15.5),
         legend.position='none')
-
-
-
-
-
-
 
 
 ########################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
