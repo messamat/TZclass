@@ -376,17 +376,40 @@ print(grid.arrange(p1,p2, ncol=2, layout_matrix = lay))
 dev.off()
 
 ######################################################## Class boxplots ################
-merge(HITo15y, classr6_df, by="ID")
-HITallboxplot <-ggplot(HITo15y, aes(x=indice_sub, y=value, color=group1)) + 
-  scale_y_log10(name='Metric value') +
-  geom_boxplot() +
-  facet_grid(group2~group1, scales = "free", space="free_x") + 
-  scale_x_discrete(name='Metric number (Appendix 1)')+
+classHIT <- merge(HITo15y, classr6_df, by="ID")
+# classHITplot_sub <-ggplot(setDT(classHIT)[(classHIT$indice %like% "ml"),], aes(x=as.factor(gclass), y=value, color=as.factor(gclass))) + 
+#   scale_y_log10(name='Metric value') +
+#   geom_boxplot() +
+#   scale_x_discrete(name='Metric number (Appendix 1)')+
+#   theme_classic() +
+#   facet_grid(~indice, scale='free_y') +
+#   theme(axis.title = element_text(size=9),
+#         axis.text.y = element_text(size=9),
+#         strip.text = element_text(size = 9),
+#         legend.position='none')
+# classHITplot_sub
+
+HITselplot <- c('ma41','ma8','ml14','mh16','fl1','fh1','dl12','dh18','tl1','th1','ra1','ra3')
+HITselplotname <- c('Annual runoff', 'Q25/Q75','Min.flow/median flow','Q10/Q50',
+  'Low flood pulse count', 'High flood pulse count','Annual min. 7-day flow','# of zero flow days', 
+  'Date of annual min.','Date of annual max.','Rise rate','Fall rate')
+classHITsel <- classHIT[classHIT$indice %in% HITselplot,]
+classHITsel$indice <- factor(classHITsel$indice, levels = HITselplot)
+HIT_labels<-setNames(paste(HITselplot,HITselplotname,sep=": "),HITselplot)
+classHITplot <-ggplot(classHITsel, aes(x=as.factor(gclass), y=value+0.01, color=as.factor(gclass))) + 
+  geom_boxplot(outlier.shape = NA) +
+  scale_y_continuous(name='Metric value',expand=c(0.05,0)) +
+  scale_x_discrete(name='Hydrologic class')+
+  scale_colour_manual(values=classcol) + 
   theme_classic() +
-  theme(axis.title = element_text(size=16),
-        axis.text.y = element_text(size=16),
-        strip.text = element_text(size = 15.5),
-        legend.position='none')
+  theme(axis.title = element_text(size=14),
+        axis.text.y = element_text(size=12, angle=90),
+        strip.text = element_text(size=10),
+        legend.position='none') +
+  facet_wrap(~indice, scales='free',ncol=4,labeller=as_labeller(HIT_labels)) 
+png(file.path(outdirclass,'6class_boxplot.png'),width = 8.5, height=11.5,units='in',res=300)
+print(classHITplot)
+dev.off()
 
 
 ########################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
@@ -426,13 +449,6 @@ rufi_r6r<- predict.boosting(adaboost.r6r, newdata=rufienvsub_std[,pred_envar], n
 rufi_r6r_pred <- cbind(rufienvsel_r6r,gclass=rufi_r6r$class)
 rufi_r6r_pred$GridID <- as.integer(rownames(rufi_r6r_pred)) 
 write.dbf(rufi_r6r_pred[,c('GridID','gclass')], file.path(outdirclass, "predict_r6r_env2.dbf"))
-
-
-
-
-
-
-
 
 
 ################################## DUMP #####################################
