@@ -151,12 +151,12 @@ outcols <- c(1:4,6,7,9,45:70,93:113, which(colnames(rufienv) %in% c('CatFlowAcc'
                                              !is.na(str_match(colnames(rufienv),'DirSum*'))))
 rufienvsub <- rufienv[,-outcols]
 rufienvsub$ReaDirMaj <- as.factor(rufienvsub$ReaDirMaj)
-colnames(rufienvsub)
+#colnames(rufienvsub)
 
 #Data transformation
 #Transform catchments
 str(rufienvsub)
-colnames(rufienvsub)
+#colnames(rufienvsub)
 factcol <- c(1,2,54,55,56,57,156,157,160)
 #hist.plots(rufienvsub[,-factcol]) #Inspect data
 logcols <- c('CatPopDen','ReaSloAvg','WsArea','WsPopDen')
@@ -263,7 +263,7 @@ write.dbf(rufi_r5r_pred[,c('GridID','gclass')], file.path(outdir, "class_ward_ra
 
 
 ######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
-########################################Classify based on raw indices############################################
+################################################Classify based on raw indices############################################
 gaugegow_o15y <- HITdist(HITo15y, logmetrics=TRUE)
 gaugecla_ward <-hclust(gaugegow_o15y, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 gaugecla_ward2 <-hclust(gaugegow_o15y, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
@@ -412,7 +412,7 @@ print(classHITplot)
 dev.off()
 
 
-########################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
+################################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
 #Set #1
 pred_envar1 <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd',
                 'WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45')
@@ -433,11 +433,16 @@ cat.r6r <- rpart(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], method='cl
 summary(cat.r6r)
 rpart.plot(cat.r6r)
 #Boosted tree
-adaboost.r6r <- boosting(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=1000,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
+adaboost.r6r <- boosting(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=500,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
 varimp <- data.frame(imp=adaboost.r6r$imp[order(adaboost.r6r$imp, decreasing = TRUE)])
 varimp$var <- rownames(varimp)
-ggplot(varimp[varimp$imp>0,],aes(x=reorder(var, -imp),y=imp)) + geom_bar(stat='identity') +
+png(file.path(outdirclass,'6class_predict_envar2_imp.png'),width = 6, height=4,units='in',res=300)
+print(
+  ggplot(varimp[varimp$imp>0,],aes(x=reorder(var, -imp),y=imp)) + geom_bar(stat='identity') +
   theme(axis.text.x=element_text(angle=90))
+)
+dev.off()
+
 #CV
 adaboostcv.r6r <- boosting.cv(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=100,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1), v=11)
 adaboostcv.r6r
@@ -446,9 +451,8 @@ adaboostcv.r6r
 rufi_r6r<- predict.boosting(adaboost.r6r, newdata=rufienvsub_std[,pred_envar], newmfinal=length(adaboost.r6r$trees))
 #rufi_r6rmaxprob <- adply(rufi_r6r$prob, 1, max)
 #qplot(rufi_r6rmaxprob$V1)
-rufi_r6r_pred <- cbind(rufienvsel_r6r,gclass=rufi_r6r$class)
-rufi_r6r_pred$GridID <- as.integer(rownames(rufi_r6r_pred)) 
-write.dbf(rufi_r6r_pred[,c('GridID','gclass')], file.path(outdirclass, "predict_r6r_env2.dbf"))
+rufi_r6r_pred <- data.frame(GridID=as.integer(rownames(rufienvsub_std)),gclass=rufi_r6r$class)
+write.dbf(rufi_r6r_pred, file.path(outdirclass, "predict_r6r_env2.dbf"))
 
 
 ################################## DUMP #####################################
