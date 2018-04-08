@@ -59,22 +59,23 @@ rufidat_clean<-hyear.internal(rufidat_clean,hyrstart=10) #Ignore hdoy
 
 rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
 
-# rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltab.dbf'))
+# rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltab.csv'))
 # numcol <- colnames(rufienv)[which(sapply(rufienv, is.numeric))]
 # sumcol <-adply(rufienv[,numcol],2,function(x) sum(x, na.rm=T))
 # incol <- colnames(rufienv)[!(colnames(rufienv) %in% sumcol[sumcol$V1==0,'X1'])]
 # rufienv <- rufienv[,incol] #Take out all 0 columns
-# write.dbf(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
-rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
+# write.csv(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'),row.names=F)
+rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'))
 
-# gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
+# gagesenv <- read.csv(file.path(getwd(),'gages_netjoin.csv'))
 # incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
 # gagesenv <- gagesenv[,incol] #Take out all 0 columns
-# write.dbf(gagesenv, file.path(getwd(),'gages_netjoinclean.dbf'))
-gagesenv <- read.dbf(file.path(getwd(),'gages_netjoinclean.dbf'))
+# write.csv(gagesenv, file.path(getwd(),'gages_netjoinclean.csv'),row.names=F)
+gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv'))
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
-#write.dbf(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180330.dbf'))
+# write.csv(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180330.csv'),row.names=F)
 
+#######UPDATE NEEDED, MAKE SURE THAT FACTOR COLUMNS REMAIN SO#########################
 ##########################################
 #BUild summary tables
 rufidat_dt <- data.table(rufidat_clean)
