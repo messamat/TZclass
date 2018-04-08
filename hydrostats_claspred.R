@@ -57,9 +57,9 @@ rufidat_gapsummary <- read.csv(file.path(datadir, 'rufidat_gapsummary.csv'))
 rufidat_post1991<-read.csv(file.path(datadir, 'gageselect_post1991comp90.csv'))
 rufidat_o15y<-read.csv(file.path(datadir, 'gageselect_o15comp90.csv'))
 
-gagesenv <- read.dbf(file.path(getwd(),'gages_netjoinclean.dbf'))
+gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv'))
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
-rufienv <- read.dbf(file.path(getwd(),'streamnet118_rufiji_finaltabclean.dbf'))
+rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'))
 
 predsmelt <-melt(setDT(rufidat_impute),id.vars = 'Date',value.name='Flow',variable.name='ID')
 predsmelt <- predsmelt[,c(2,1,3)]
@@ -75,7 +75,6 @@ predsmelt <- merge(predsmelt, rufidat_post1991, by='ID',all.x=T)
 predsmelt <- merge(predsmelt, rufidat_o15y, by='ID',all.x=T)
 
 ############################################### Compute hydrologic metrics##########################################
-
 allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", floodquantile=0.95) {
   #Get template
   dailyQClean <- validate_data(dfhydro[dfhydro$ID==templateID,c("Date", "Flow")], yearType="water")
@@ -145,7 +144,7 @@ HITboxplot(HITo15y, 'HITallboxploto15y.png')
 ########################################Format environmental data to be used in predictions##################################
 #Make subset of data
 colnames(rufienv)
-outcols <- c(1:4,6,7,9,45:70,93:113, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
+outcols <- c(1:5,7,8,10,46:71,94:114, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
                                                                     'WsPAPer','WsDamDen','WsGeolMaj','WsLCMaj','ReaElvMin',
                                                                     'ReaElvMax','SUM_LENGTH_GEO','Shape_Leng') |
                                              !is.na(str_match(colnames(rufienv),'DirSum*'))))
@@ -156,12 +155,14 @@ rufienvsub$ReaDirMaj <- as.factor(rufienvsub$ReaDirMaj)
 #Data transformation
 #Transform catchments
 str(rufienvsub)
-#colnames(rufienvsub)
+colnames(rufienvsub)
 factcol <- c(1,2,54,55,56,57,156,157,160)
+#Make factor colums factors
+rufienvsub[,factcol] <- sapply(rufienvsub[,factcol], as.factor)
 #hist.plots(rufienvsub[,-factcol]) #Inspect data
 logcols <- c('CatPopDen','ReaSloAvg','WsArea','WsPopDen')
 rufienvsub[,logcols] <- data.trans(data.frame(rufienvsub[,logcols]), method = 'log', plot = F)
-asincols <- c('CatFLosSum', paste('LCSum',c(1,2,3,4,5,6,7,8,10,12,23,34,45,56,67,78,89,'10_1'),sep='_'),'CatWatExt','CatResInd','CatLakInd','WsFLosSum_',
+asincols <- c('CatFLosSum_1', paste('LCSum',c(1,2,3,4,5,6,7,8,10,12,23,34,45,56,67,78,89,'10_11'),sep='_'),'CatWatExt','CatResInd','CatLakInd','WsFLosSum_1',
               'WsWatExt','WsResInd','WsLakInd')
 rufienvsub[,asincols] <- data.trans(rufienvsub[,asincols], method = 'asin', plot = F)
 sqrtcols <- c('CatAIAvg', 'CatBio14Av','CatBio17Av','CatBio19Av','CatElvMax', 'CatElvAvg','CatSloAvg','CatSloStd','CatLen_1','CatPAPer',
@@ -416,35 +417,58 @@ dev.off()
 #Set #1
 pred_envar1 <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd',
                 'WsBio01Av','WsBio07Av','WsBio12Av','LCSum_45')
-#Set #2
-pred_envar <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatGeolMaj','WsDRocAvg','WsPopDen','ReaElvAvg','WsLakInd','WsBio01Av','WsBio07Av',
-               'WsBio12Av','WsBio13Av','WsBio14Av','WsBio15Av','WsBio16Av','WsBio17Av','WsBio18Av','WsBio19Av','WsAIAvg','WsPermAvg','WsPoroAvg',
-               'LCSum_12','LCSum_23','LCSum_34','LCSum_45','LCSum_67','LCSum_78','LCSum_89','WsFLosSum_')
-gagesenvsel <- gagesenv_format[gagesenv_format$RGS_No %in% unique(rufidat_select_o15y$ID),]
 
+#Set #2 - take out CatGeolMaj, WsDirMaj as not fully representing dataset
+pred_envar2 <-c('WsArea','WsSloAvg','CatWatExt','CatWatOcc','CatWatSea','WsDRocAvg','WsPopDen','ReaElvAvg','WsLakInd','WsBio01Av','WsBio04Av',
+               'WsBio07Av','WsBio08Av','WsBio09Av','WsBio12Av','WsBio13Av','WsBio14Av','WsBio15Av','WsBio16Av','WsBio17Av','WsBio18Av','WsBio19Av',
+               'WsAIAvg','WsPermAvg','WsPoroAvg','LCSum_12','LCSum_23','LCSum_34','LCSum_45','LCSum_67','LCSum_78','LCSum_89','WsFLosSum_1',
+               colnames(gagesenv)[which(!is.na(str_match(colnames(gagesenv),'GeolSum*')))][30:52])
+
+#Set #3 - take out CatGeolMaj, WsDirMaj was not fully representing dataset and try without geology
+pred_envar <-c('WsArea','WsSloAvg','CatWatExt','CatWatOcc','CatWatSea','WsDRocAvg','WsPopDen','ReaElvAvg','WsLakInd','WsBio01Av','WsBio04Av',
+               'WsBio07Av','WsBio08Av','WsBio09Av','WsBio12Av','WsBio13Av','WsBio14Av','WsBio15Av','WsBio16Av','WsBio17Av','WsBio18Av','WsBio19Av',
+               'WsAIAvg','WsPermAvg','WsPoroAvg','LCSum_12','LCSum_23','LCSum_34','LCSum_45','LCSum_67','LCSum_78','LCSum_89','WsFLosSum_1')
+pred_envarname <- c("area", ' average slope', 'catchment water extent', 'catchment water occurrence', "catchment water seasonality",
+                    " average depth to bedrock",' average pop. density', 'reach elevation',' lake index',' mean annual temp.',
+                    " seasonality (temp. sd)", " temp. annual range", " mean temp. of wettest quarter", " mean temp. of driest quarter",
+                    " annual precipitation", " precip. of wettest month", " precip. of driest month", " precip. seasonality"," precip. of wettest quarter",
+                    " precip. of driest quarter", " precip. of warmest quarter", " precip. of coldest quarter", " average aridity index",
+                    " average subsoil permeability", " average subsoil porosity", " percentage tree cover", " percentage shrub cover", " percentage grassland",
+                    " percentage cropland", " percentage sparse vegetation", " percentage bare areas", " percentage urban areas", 
+                    " percentage forest loss 2000-2016")
+pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname)
+length(pred_envar)
+
+gagesenvsel <- gagesenv_format[gagesenv_format$RGS_No %in% unique(rufidat_select_o15y$ID),]
 gagesenv_r6 <- merge(gagesenvsel,classr6_df, by.x='RGS_No', by.y='ID')
 rownames(gagesenv_r6) <- gagesenv_r6$RGS_No
 gagesenv_r6 <- gagesenv_r6[,-which(colnames(gagesenv_r6) %in% c('RGS_No','GridID'))]
 gagesenv_r6$gclass <- as.factor(gagesenv_r6$gclass)
 rownames(rufienvsub_std) <- rufienvsub_std$GridID
 rufienvsub_std <- rufienvsub_std[,-which(colnames(rufienvsub_std) %in% 'GridID')]
+
 #Single tree
-cat.r6r <- rpart(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], method='class',control=rpart.control(minsplit=1, minbucket=1, cp=0.05))
+cat.r6r <- rpart(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], method='class',control=rpart.control(minsplit=4, minbucket=1, cp=0.05))
 summary(cat.r6r)
-rpart.plot(cat.r6r)
+prp(cat.r6r, col=classcol)
+rpart.plot(cat.r6r, cex=0.8, type=3, extra=1,box.palette = classcol[c(1,1,1,1,1,1,1)])
+
 #Boosted tree
-adaboost.r6r <- boosting(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=500,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
+adaboost.r6r <- boosting(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=2000,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
 varimp <- data.frame(imp=adaboost.r6r$imp[order(adaboost.r6r$imp, decreasing = TRUE)])
 varimp$var <- rownames(varimp)
-png(file.path(outdirclass,'6class_predict_envar2_imp.png'),width = 6, height=4,units='in',res=300)
+varimp <- merge(varimp, pred_envlabel, by='var')
+png(file.path(outdirclass,'6class_predict_envar3_imp.png'),width = 6, height=4,units='in',res=300)
 print(
-  ggplot(varimp[varimp$imp>0,],aes(x=reorder(var, -imp),y=imp)) + geom_bar(stat='identity') +
-  theme(axis.text.x=element_text(angle=90))
+  ggplot(varimp[varimp$imp>0,],aes(x=reorder(label, -imp),y=imp)) + geom_bar(stat='identity') +
+    theme_classic()+
+    theme(axis.text.x=element_text(angle=45, hjust=1, size=10)) + 
+    scale_y_continuous(name='Variable relative importance (%)', expand=c(0,0)) +
+    scale_x_discrete(name="Variable name")
 )
 dev.off()
-
-#CV
-adaboostcv.r6r <- boosting.cv(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=100,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1), v=11)
+#CV boosted tree
+adaboostcv.r6r <- boosting.cv(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=100,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1), v=23)
 adaboostcv.r6r
 
 #Predict
@@ -452,7 +476,7 @@ rufi_r6r<- predict.boosting(adaboost.r6r, newdata=rufienvsub_std[,pred_envar], n
 #rufi_r6rmaxprob <- adply(rufi_r6r$prob, 1, max)
 #qplot(rufi_r6rmaxprob$V1)
 rufi_r6r_pred <- data.frame(GridID=as.integer(rownames(rufienvsub_std)),gclass=rufi_r6r$class)
-write.dbf(rufi_r6r_pred, file.path(outdirclass, "predict_r6r_env2.dbf"))
+write.dbf(rufi_r6r_pred, file.path(outdirclass, "predict_r6r_env3.dbf"))
 
 
 ################################## DUMP #####################################
