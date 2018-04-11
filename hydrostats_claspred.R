@@ -108,6 +108,7 @@ rufidat_select1991 <- predsmelt[predsmelt$gap_per<=0.1 &  predsmelt$ycount1991>=
 HITpost1991 <- allHITcomp(as.data.frame(rufidat_select1991), gagesenv, 'ID')
 rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$hyear<2017 &  predsmelt$ycount_o15>=15,]
 HITo15y <- allHITcomp(as.data.frame(rufidat_select_o15y), gagesenv, 'ID')
+#write.csv(HITo15y, file.path(outdir, 'HITo15y.csv'),row.names=F)
 
 ############################################### Box plot of metrics##############################
 HITboxplot <- function(HITdf, plotname) {
@@ -336,16 +337,31 @@ dev.off()
 rufidat_select_classr6 <- merge(rufidat_select_o15y, classr6_df, by="ID")
 #write.csv(rufidat_select_classr6, file.path(outdir, 'class_ward_raw/rufidat_select_classr6.csv'), row.names=F)
 setDT(rufidat_select_classr6)[,yrmean:=mean(Flow),.(ID,hyear)]
-classflowstats <- setDT(rufidat_select_classr6)[,list(classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .75,na.rm=T),
+classflowstats <- setDT(rufidat_select_classr6)[,list(classmeanfull=mean(Flow, na.rm=T), classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .75,na.rm=T),
                                                       classQ25=quantile(Flow/yrmean, .25,na.rm=T),classQ90=quantile(Flow/yrmean, .90,na.rm=T),
                                                       classQ10=quantile(Flow/yrmean, .10,na.rm=T),classmax=max(Flow/yrmean,na.rm=T),
                                                       classmin=min(Flow/yrmean,na.rm=T),classsd=sd(Flow/yrmean,na.rm=T), 
                                                       cal_hdoy=format(as.Date(hdoy, origin='2015-10-01'), "%Y-%m-%d")),
                                                 .(gclass,hdoy)]
 
+classhydro_allfull <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmeanfull, color=factor(gclass))) + 
+  geom_line(size=1, alpha=0.8) + 
+  scale_color_manual(name='Hydrologic class',values=classcol) +
+  scale_y_continuous(name='Daily mean discharge',expand=c(0,0),limits=c(0,NA)) + 
+  scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
+  theme_classic() + 
+  theme(legend.position=c(0.8,0.8),
+        text=element_text(size=18))
+png(file.path(outdirclass,'6class_hydrographfull.png'),width = 16, height=9,units='in',res=300)
+print(classhydro_allfull)
+dev.off()
+
+
+
 classhydro_all <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmean, color=factor(gclass))) + 
   geom_line(size=1, alpha=0.8) + 
   scale_color_manual(name='Hydrologic class',values=classcol) +
+  scale_fill_manual(name='Hydrologic class',values=classcol) +
   scale_y_continuous(name='Daily mean discharge/Mean daily discharge',expand=c(0,0),limits=c(0,NA)) + 
   scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
   theme_classic() + 
@@ -412,6 +428,10 @@ png(file.path(outdirclass,'6class_boxplot.png'),width = 8.5, height=11.5,units='
 print(classHITplot)
 dev.off()
 
+head(classHIT)
+classHIT_summary<- setDT(classHIT)[,classmean:=mean(value, na.rm=T), .(indice, gclass)]
+classHIT_summary <- dcast(classHIT_summary, indice~gclass, value.var='classmean', fun=mean)
+write.csv(classHIT_summary, file.path(outdirclass, 'classHIT_summary.csv'), row.names=F)
 
 ################################################Predict based on raw-hydro metrics classification and raw environmental predictors############################
 #Set #1
