@@ -21,6 +21,15 @@ setwd("F:/Tanzania/Tanzania/results") #UPDATE
 datadir = file.path(getwd(),'rufiji_hydrodataraw') #UPDATE
 origdatadir = "F:/Tanzania/Tanzania/data"
 
+#Define output directory
+outdir=file.path(getwd(),'rufiji_hydrodatainspect')
+if (dir.exists(outdir)) {
+  print('Directory already exists')
+} else {
+  print(paste('Create new directory:',outdir))
+  dir.create(outdir)
+}
+
 #Function to remove spurious constant values
 remove_constant <- function(gage_data, gap_n=20) {
   gage_data[1,'Flag2'] <- 0
@@ -46,9 +55,8 @@ setClass('myDate')
 #rufidat <- read.csv(file.path(datadir,'ZTE_rufidat.csv'),colClasses = c('character','character','myDate','numeric','numeric','factor','factor','factor'))
 rufidat <- read.csv(file.path(datadir,'ZTE_rufidat.csv'),colClasses = c('character','character','Date','numeric','numeric','factor','factor','factor'))
 RBWBflow <- read.csv(file.path(datadir, 'RBWBflowdat.csv'), colClasses = c('Date','numeric','character'))
+JKdat <- read.csv(file.path(datadir, 'JK_dailydat.csv'), colClasses= c('Date', 'numeric', 'character'))
 str(rufidat)
-
-
 
 #General plotting of time series
 rawplot <- ggplot(rufidat, aes(x=Date.Time, y=Calculated.Flow..cms.)) + 
@@ -61,7 +69,6 @@ rawplot <- ggplot(rufidat, aes(x=Date.Time, y=Calculated.Flow..cms.)) +
 #png('rufidat_rawts.png',width = 32, height=16,units='in',res=300)
 #rawplot
 #dev.off()
-
 ########################################################################################################
 #Format rufiji flow data to be used within the FlowScreen package following the USGS data import format
 #FlowScreen package was developed to work with Water Survey of Canada (WSC) or the United States Geological Survey (USGS) data. 
@@ -88,14 +95,10 @@ colnames(RBWBflow) <- c('ID','Date','Flow')
 RBWBflow$SYM <- NA
 RBWBflow$Agency <- 'RBWB_DavidMunkyala'
 
-#Inspect data prior to cleaning
-outdir=file.path(getwd(),'rufiji_hydrodatainspect_20180326')
-if (dir.exists(outdir)) {
-  print('Directory already exists')
-} else {
-  print(paste('Create new directory:',outdir))
-  dir.create(outdir)
-}
+JKdat <- JKdat[,c(3,1,2)]
+colnames(JKdat) <- c('ID','Date','Flow')
+JKdat$SYM <- 'simulated'
+JKdat$Agency <- 'JaphetKashaigili'
 
 for (gage in unique(rufidat_screenform$ID)) {
   print(gage)
@@ -167,13 +170,25 @@ ggplot(dm1KB32[dm1KB32$Date>'2007-01-01',], aes(x=Date,y=Flow)) + geom_line() + 
 RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KB32' & 
                                      RBWBflow_clean$Date %in% c('2013-04-20', '2015-04-30')),]
 
+###1K3A Rufiji @ Stiegler's Gorge: unrealistic rises and falls (e.g. see March 1978) - cannot use data
+dm1K3A <- RBWBflow[RBWBflow$ID=='1K3A',]
+ggplot(dm1K3A, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+
 #################################Clean out obviously spurious data in data from Japhet Kashaigili UDSM ###########################
+JKdat_clean <- JKdat
+#1KB27 Luipa @ Mbingu: some discontinuities in record (sudden falls) + some suddenly low values near zero (1964)
+jk1KB27 <- JKdat[JKdat$ID=='1KB27',]
+ggplot(jk1KB27[jk1KB27$Date>'1970-01-01',], aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+JKdat_clean <- JKdat_clean[!(JKdat_clean$ID=='1KB27' & (JKdat_clean$Date>='1963-12-01' & JKdat_clean$Date<='1964-01-31') | JKdat_clean$Flow<2),]
 
+#1KB28: Kihansi @ Ludoga
+jk1KB28 <- JKdat[JKdat$ID=='1KB28',]
+ggplot(jk1KB28, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 
-
-
-
-
+#BBM2: Udajaji River @ Bridge (E 0816580, N 9047210, UTM Zone N 36): not very useful, only a few sparse months of data.
+JKdat_clean[which(JKdat_clean$ID=='Udagaji' & !is.na(JKdat_clean$ID)),'ID'] <- 'BBM2'
+BBM2 <- JKdat_clean[JKdat_clean$ID=='BBM2',]
+ggplot(BBM2, aes(x=Date,y=Flow)) + geom_point()
 
 #################################Clean out obviously spurious data in cleaned out data from ZTE###########################
 rufidat_clean <- rufidat_screenform
@@ -189,7 +204,6 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>
 ###1KA9	KIMANI RIVER AT OLD GN: overall variability seems unrealistic. Replace with RBWB David Munkyala data
 g1KA9<-rufidat_clean[rufidat_clean$ID=='1KA9',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA9'),] 
-rufidat_clean <- rbind(rufidat_clean, RBWBflow[RBWBflow$ID=='1KA9',])
 
 ###1KA11A seems like data prior to 165 is shifted up, could either be due to change in channel morphology, rating curve, or serious change inf low, remove
 g1KA11A<-rufidat_clean[rufidat_clean$ID=='1KA11A',]
@@ -293,9 +307,22 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow
 g1KB24<- rufidat_clean[rufidat_clean$ID=='1KB24',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB24' & rufidat_clean$Date<'1985-01-01'& rufidat_clean$Flow>20),] 
 
+#################################Merge datasets#############################################
+rufidat_all <- rbind(rufidat_screenform, 
+                        RBWBflow[RBWBflow$ID %in% c('1KA9','1KA39A','1KB31','1KB32'),], 
+                        JKdat[JKdat$ID %in% c('1KB27','1KB28'),])
+
+rufidat_cleanall <- rbind(rufidat_clean, 
+                          RBWBflow_clean[RBWBflow_clean$ID %in% c('1KA9','1KA39A','1KB31','1KB32'),], 
+                          JKdat_clean[JKdat_clean$ID %in% c('1KB27','1KB28'),])
+
 #################################Create dataset of deleted values###########################
 rufidat_deleted <- anti_join(rufidat_screenform, rufidat_clean, by=c("ID","Date"))
+RBWBflow_deleted <- anti_join(RBWBflow, RBWBflow_clean, by=c("ID","Date"))
+JKdat_deleted <- anti_join(JKdat, JKdat_clean, by=c("ID","Date"))
+rufidat_deletedall <- rbind(rufidat_deleted, RBWBflow_deleted, JKdat_deleted)
 
 #################################Export data to directory########################################
-write.csv(rufidat_clean, file.path(outdir,'rufidat_clean.csv'),row.names = F)
-write.csv(rufidat_deleted, file.path(outdir,'rufidat_deleted.csv'),row.names = F)
+write.csv(rufidat_all, file.path(outdir, 'rufidat_all.csv'), row.names = F)
+write.csv(rufidat_cleanall, file.path(outdir,'rufidat_clean.csv'),row.names = F)
+write.csv(rufidat_deletedall, file.path(outdir,'rufidat_deleted.csv'),row.names = F)
