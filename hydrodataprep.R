@@ -10,17 +10,22 @@
 
 #Purpose: import and merge hydrological data for the Rufiji basin of Tanzania — provided by CDMSmith Zachary T. Eichenwald (ZTE) and Japhet Kashaigili (JK)
 
+devtools::install_github("awalker89/openxlsx")
 library(openxlsx)
 library(reshape2)
-setwd("F:/Tanzania/Tanzania/results") #UPDATE
-datadir = "F:/Tanzania/Tanzania/data" #UPDATE
+library(DescTools)
+library(stringr)
+rootdir= "F:/Tanzania/Tanzania" #UPDATE
+setwd(file.path(rootdir, "results")) 
+datadir = file.path(rootdir, "data")
 ########################################
 #Import and merge hydrological data
 ########################################
 ###Import and merge ruaha data from Zach 
 setClass('myDate')
-setAs("character","myDate", function(from)  as.POSIXct(from, format= "%m/%d/%Y %H:%M"))
-ruahaflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-06 Corrected Ruaha Stage and Flow_data.csv"),colClasses = c('factor','factor','myDate','numeric','numeric','character','character'))
+setAs("character","myDate", function(from)  as.POSIXct(from, format= "%m/%d/%Y %H:%M")) #Create format to directly import data column in appropriate format
+ruahaflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-06 Corrected Ruaha Stage and Flow_data.csv"),
+                      colClasses = c('factor','factor','myDate','numeric','numeric','character','character'))
 length(table(ruahaflow$Gage.ID))
 ruahaflow <- ruahaflow[,!names(ruahaflow) %in% c("X","X.1")]
 #str(ruahaflow)
@@ -53,6 +58,33 @@ kilomdat <- merge(kilomflow, kilomstations[,c('Station_ID','Rating.Curve.Source'
 ###Merge great Ruaha data and Kilombero data
 rufidat <- rbind(ruahadat, kilomdat)
 
+##########################################################################################################################################
+###Import raw stage data from RBWB given by ZTE
+setAs("character","myDate", function(from)  as.POSIXct(from, format= "%m/%d/%Y")) #Create format to directly import data column in appropriate format
+RBWBhdtb <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-06_HydroDatabase_StageMeasurementDatabase.csv"),
+                     colClasses = c('factor','factor','character','character','myDate',rep('character',13)))
+
+RBWBhdtb[,"Date.Time"] <- as.POSIXct(paste(RBWBhdtb$Date.Time, RBWBhdtb$Time), format="%Y-%m-%d %H:%M:%S")
+RBWBhdtb <- RBWBhdtb[,!(names(RBWBhdtb) %like% "X%")]
+RBWBhdtb <- RBWBhdtb[!(RBWBhdtb$Stage..m.=='m'),] 
+RBWBhdtb$Stage..m. <- as.numeric(RBWBhdtb$Stage..m.)
+
+##########################################################################################################################################
+###Import flow data from RBWB David
+RBWBflow <- data.frame(Date=NULL, `Flow`=NULL, Gage.ID=NULL)
+for (sheet in 1:25) {
+  flowdf <- read.xlsx(file.path(datadir,"RBWB_David20180415/Sheet 2_ flows_edit.xlsx"),sheet=sheet,startRow=1, detectDates=F)
+  gage <- colnames(flowdf)[2]
+  print(gage)
+  flowdf <- read.xlsx(file.path(datadir,"RBWB_David20180415/Sheet 2_ flows_edit.xlsx"),sheet=sheet,startRow=3, detectDates=F)
+  colnames(flowdf) <- c('Date', 'Flow')
+  flowdf$Gage.ID <- gage
+  flowdf$Date <- as.Date(flowdf$Date, origin='1899-12-30')
+  RBWBflow <- rbind(RBWBflow, flowdf)
+}
+
+
+##########################################################################################################################################
 ###Import daily data from Japhet K.
 Japhet_GRuaha <- read.xlsx(file.path(datadir,"JaphetK_20180316/Rufiji_L.RukwaBasins_Flow Data_formatMM20180322.xlsx"),sheet=1,startRow=4, detectDates=T)
 Japhet_1KA59 <- Japhet_GRuaha[,c(1,2)]
@@ -108,7 +140,7 @@ Japhet_Rukwa <- Japhet_Rukwa[!is.na(Japhet_Rukwa$`Flow.(m3/s)`),] #No NA, must b
 ########################################
 #Export data to directory
 ########################################
-outdir=file.path(getwd(),paste('rufiji_hydrodataraw',as.character(format(Sys.Date(),'%Y%m%d')),sep='_'))
+outdir=file.path(getwd(),'rufiji_hydrodataraw')
 if (dir.exists(outdir)) {
   print('Directory already exists')
 } else {
@@ -116,6 +148,8 @@ if (dir.exists(outdir)) {
   dir.create(outdir)
 }
 write.csv(rufidat, file.path(outdir,'ZTE_rufidat.csv'),row.names = F)
+write.csv(RBWBhdtb, file.path(outdir, 'ZTE_RBWBhydrodat.csv'), row.names=F)
+write.csv(RBWBflow, file.path(outdir, 'RBWBflowdat.csv'), row.names=F)
 write.csv(Japhet_dailydat, file.path(outdir,'JK_dailydat.csv'),row.names = F)
 write.csv(Japhet_Unimpaired, file.path(outdir,'JK_monthly_unimpaired.csv'),row.names = F)
 write.csv(Japhet_Rukwa, file.path(outdir,'JK_monthly_rukwa.csv'),row.names = F)
