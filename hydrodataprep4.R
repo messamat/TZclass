@@ -30,7 +30,7 @@ if (dir.exists(outdir)) {
   print(paste('Create new directory:',outdir))
   dir.create(outdir)
 }
-rufidat <- read.csv(file.path(getwd(),'rufiji_hydrodataraw','ZTE_rufidat.csv'),colClasses = c('character','character','Date','numeric','numeric','factor','factor','factor'))
+rufidat <- read.csv(file.path(datadir,'rufidat_all.csv'), colClasses=c('character','Date','numeric','character','character'))
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
 rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
 gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
