@@ -45,7 +45,10 @@ setClass('myDate')
 #setAs("character","myDate", function(from)  as.POSIXlt(from, format= "%Y-%m-%d %H:%M:%S"))
 #rufidat <- read.csv(file.path(datadir,'ZTE_rufidat.csv'),colClasses = c('character','character','myDate','numeric','numeric','factor','factor','factor'))
 rufidat <- read.csv(file.path(datadir,'ZTE_rufidat.csv'),colClasses = c('character','character','Date','numeric','numeric','factor','factor','factor'))
+RBWBflow <- read.csv(file.path(datadir, 'RBWBflowdat.csv'), colClasses = c('Date','numeric','character'))
 str(rufidat)
+
+
 
 #General plotting of time series
 rawplot <- ggplot(rufidat, aes(x=Date.Time, y=Calculated.Flow..cms.)) + 
@@ -79,6 +82,11 @@ rufidat_screenform <- rufidat_screenform[,list(Calculated.flow..cms.daily=mean(C
 rufidat_screenform <- rufidat_screenform[,c('Gage.ID','Date.Time','Calculated.flow..cms.daily','Record.Quality','Rating.Curve.Source')]
 colnames(rufidat_screenform) <- colnames(test)
 which(duplicated(rufidat_screenform[,c('Date','ID')]))
+
+RBWBflow <- RBWBflow[,c(3,1,2)]
+colnames(RBWBflow) <- c('ID','Date','Flow')
+RBWBflow$SYM <- NA
+RBWBflow$Agency <- 'RBWB_DavidMunkyala'
 
 #Inspect data prior to cleaning
 outdir=file.path(getwd(),'rufiji_hydrodatainspect_20180326')
@@ -130,7 +138,44 @@ for (gage in unique(rufidat_screenform$ID)) {
   dev.off()
 }
 
-#################################Clean out obviously spurious data ###########################
+#################################Clean out obviously spurious data in data from David Munkyala RBWB ###########################
+RBWBflow_clean <- RBWBflow
+###1KA9 KIMANI RIVER AT OLD GN: period prior to 1972 seems suspect, large variations with speed beyond range of time series.
+dm1KA9<- RBWBflow[RBWBflow$ID=='1KA9',]
+#ggplot(dm1KA9, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+RBWBflow_clean <- RBWBflow[!(RBWBflow$ID=='1KA9' & RBWBflow$Date<='1972-01-15'),]
+
+###1KA39A LITTLE RUAHA @ IWAWA: suspiciously low values in December 1964 (jump back to 10 cms on January 1st)
+dm1KA39A<- RBWBflow[RBWBflow$ID=='1KA39A',]
+ggplot(dm1KA39A, aes(x=Date,y=Flow)) + geom_point()
+RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KA39A' & RBWBflow_clean$Flow<0.5),]
+
+###1KB31 Kigogo-Ruaha @ Lugema (Mshongo): anomalously low values during peak periods
+dm1KB31 <- RBWBflow[RBWBflow$ID=='1KB31',]
+setDT(dm1KB31)[, delta := shift(Flow, 1L, type="lead")-Flow,]
+ggplot(dm1KB31, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+ggplot(dm1KB31, aes(x=Date,y=delta)) + geom_point()
+
+RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KB31' & 
+                                     RBWBflow_clean$Date %in% c('2001-03-11', '2001-04-30', '2002-02-15', '2002-03-09', '2002-03-22', '2002-03-23', '2002-03-25',
+                                                                '2002-04-16', '2003-04-07', '2004-04-15', '2010-03-16', '2014-01-26','2014-04-09')),]
+
+###1KB32 Kihansi @ Lutaki: anomalous fall in 2013, 2015
+dm1KB32 <- RBWBflow[RBWBflow$ID=='1KB32',]
+setDT(dm1KB32)[, delta := shift(Flow, 1L, type="lead")-Flow,]
+ggplot(dm1KB32[dm1KB32$Date>'2007-01-01',], aes(x=Date,y=Flow)) + geom_line() + scale_y_sqrt()
+RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KB32' & 
+                                     RBWBflow_clean$Date %in% c('2013-04-20', '2015-04-30')),]
+
+#################################Clean out obviously spurious data in data from Japhet Kashaigili UDSM ###########################
+
+
+
+
+
+
+
+#################################Clean out obviously spurious data in cleaned out data from ZTE###########################
 rufidat_clean <- rufidat_screenform
 ###1KA2A	LITTLE RUAHA AT NDIUKA: period 1995 to late 2011 seems suspect: remove
 #                                 Lots of missing data, appears like low-flow part of the year was cut-off or everything was shifted up?
@@ -141,9 +186,10 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>
 ###1KA4A	GREAT RUAHA AT MSOSA: seems like stage measurements corresponding to a discharge right over 100cms are spurious as they plateau, 
 #                               but not picked up by derivative. Will be kept (seem like the discharge at which there are spot measurements).
 
-###1KA9	KIMANI RIVER AT OLD GN: very large peak in 1988 seems spurious as 02/22:131,02/23:>20,000,02/24:350 cms
+###1KA9	KIMANI RIVER AT OLD GN: overall variability seems unrealistic. Replace with RBWB David Munkyala data
 g1KA9<-rufidat_clean[rufidat_clean$ID=='1KA9',]
-rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA9' & rufidat_clean$Date=='1987-02-23'),] 
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA9'),] 
+rufidat_clean <- rbind(rufidat_clean, RBWBflow[RBWBflow$ID=='1KA9',])
 
 ###1KA11A seems like data prior to 165 is shifted up, could either be due to change in channel morphology, rating curve, or serious change inf low, remove
 g1KA11A<-rufidat_clean[rufidat_clean$ID=='1KA11A',]
@@ -243,8 +289,9 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow
 
 ###1KB24A SANJE AT SANJE: Very high peak at the beginning of the record. Way outside of the rating curve's range
 #(max spot measurement at 6cms, here flood at nearly 2500 cms, corresponding to 18m stage increase — implausible)
+#Some excessive peaks over 20cms during the short rains season pre-1985
 g1KB24<- rufidat_clean[rufidat_clean$ID=='1KB24',]
-rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB24' & rufidat_clean$Date<'1965-01-01'& rufidat_clean$Flow>50),] 
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB24' & rufidat_clean$Date<'1985-01-01'& rufidat_clean$Flow>20),] 
 
 #################################Create dataset of deleted values###########################
 rufidat_deleted <- anti_join(rufidat_screenform, rufidat_clean, by=c("ID","Date"))
