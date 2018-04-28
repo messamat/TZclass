@@ -83,6 +83,12 @@ for (sheet in 1:25) {
   RBWBflow <- rbind(RBWBflow, flowdf)
 }
 
+#Import Stiegler's gorge data and join it to other David's data
+RBWB1K3A <- read.xlsx(file.path(datadir,"RBWB_David20180415/Rufiji river_Stiglers Gorge.xlsx"),sheet=1,startRow=3, detectDates=T)
+colnames(RBWB1K3A) <- c('Date', 'Flow')
+RBWB1K3A$Gage.ID <- '1K3A'
+RBWB1K3A <- RBWB1K3A[which(!(duplicated(RBWB1K3A[,c('Date','Gage.ID')]))),] #Remove duplicates
+RBWBflow <- rbind(RBWBflow, RBWB1K3A)
 
 ##########################################################################################################################################
 ###Import daily data from Japhet K.
