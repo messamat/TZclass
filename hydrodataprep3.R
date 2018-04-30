@@ -35,11 +35,13 @@ remove_constant <- function(gage_data, gap_n=20) {
   gage_data[1,'Flag2'] <- 0
   delist <- list()
   for (i in 2:nrow(gage_data)){
+    #Accumulate number of days with constant values
     if (gage_data[i,'Flow'] == gage_data[i-1,'Flow']){
-      gage_data[i,'Flag2'] <- gage_data[i-1,'Flag2']+1
+      gage_data[i,'Flag2'] <- gage_data[i-1,'Flag2']+1 
     } else {
       gage_data[i,'Flag2'] <- 0
     }
+    #Flag period with at least gap_n days of constant values
     if (gage_data[i,'Flag2'] == gap_n) {
       delist <- c(delist, gage_data[(i-19):i,'Date'])
     } 
@@ -143,9 +145,9 @@ for (gage in unique(rufidat_screenform$ID)) {
 
 #################################Clean out obviously spurious data in data from David Munkyala RBWB ###########################
 RBWBflow_clean <- RBWBflow
-###1KA9 KIMANI RIVER AT OLD GN: period prior to 1972 seems suspect, large variations with speed beyond range of time series.
+###1KA9 KIMANI RIVER AT OLD GN: period prior to 1972 seems suspect, large variations with rate beyond range of time series.
 dm1KA9<- RBWBflow[RBWBflow$ID=='1KA9',]
-#ggplot(dm1KA9, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+ggplot(dm1KA9, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 RBWBflow_clean <- RBWBflow[!(RBWBflow$ID=='1KA9' & RBWBflow$Date<='1972-01-15'),]
 
 ###1KA39A LITTLE RUAHA @ IWAWA: suspiciously low values in December 1964 (jump back to 10 cms on January 1st)
@@ -160,15 +162,15 @@ ggplot(dm1KB31, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 ggplot(dm1KB31, aes(x=Date,y=delta)) + geom_point()
 
 RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KB31' & 
-                                     RBWBflow_clean$Date %in% c('2001-03-11', '2001-04-30', '2002-02-15', '2002-03-09', '2002-03-22', '2002-03-23', '2002-03-25',
-                                                                '2002-04-16', '2003-04-07', '2004-04-15', '2010-03-16', '2014-01-26','2014-04-09')),]
+                                     RBWBflow_clean$Date %in% as.Date(c('2001-03-11', '2001-04-30', '2002-02-15', '2002-03-09', '2002-03-22', '2002-03-23', '2002-03-25',
+                                                                '2002-04-16', '2003-04-07', '2004-04-15', '2010-03-16', '2014-01-26','2014-04-09'))),]
 
 ###1KB32 Kihansi @ Lutaki: anomalous fall in 2013, 2015
 dm1KB32 <- RBWBflow[RBWBflow$ID=='1KB32',]
 setDT(dm1KB32)[, delta := shift(Flow, 1L, type="lead")-Flow,]
 ggplot(dm1KB32[dm1KB32$Date>'2007-01-01',], aes(x=Date,y=Flow)) + geom_line() + scale_y_sqrt()
 RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KB32' & 
-                                     RBWBflow_clean$Date %in% c('2013-04-20', '2015-04-30')),]
+                                     RBWBflow_clean$Date %in% as.Date(c('2013-04-20', '2015-04-30'))),]
 
 ###1K3A Rufiji @ Stiegler's Gorge: unrealistic rises and falls (e.g. see March 1978) - cannot use data
 dm1K3A <- RBWBflow[RBWBflow$ID=='1K3A',]
@@ -192,8 +194,8 @@ ggplot(BBM2, aes(x=Date,y=Flow)) + geom_point()
 
 #################################Clean out obviously spurious data in cleaned out data from ZTE###########################
 rufidat_clean <- rufidat_screenform
-###1KA2A	LITTLE RUAHA AT NDIUKA: period 1995 to late 2011 seems suspect: remove
-#                                 Lots of missing data, appears like low-flow part of the year was cut-off or everything was shifted up?
+###1KA2A	LITTLE RUAHA AT NDIUKA: period 1995 to late 2001 seems suspect: lots of missing data, appears like low-flow part of the year was cut-off or 
+#                                                                         everything was shifted up?
 g1KA2A<-rufidat_clean[rufidat_clean$ID=='1KA2A',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>='1994-12-19' & rufidat_clean$Date<'2001-09-05'),] 
 
