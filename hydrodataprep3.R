@@ -102,64 +102,73 @@ colnames(JKdat) <- c('ID','Date','Flow')
 JKdat$SYM <- 'simulated'
 JKdat$Agency <- 'JaphetKashaigili'
 
-for (gage in unique(rufidat_screenform$ID)) {
-  print(gage)
-  gname <- as.character(unique(rufidat[rufidat$Gage.ID==gage,'Station.Name']))
-  #Generate FlowScreen time series
-  gts<- create.ts(rufidat_screenform[rufidat_screenform$ID==gage,]) #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
-  #Compute and output flowScreen metrics and plots
-  try({
-    res <- metrics.all(gts)
-    ginfo <- data.frame(StationID=gage, StnName=gname, ProvState='Rufiji Basin',Country='Tanzania',Lat=0, Long=0, Area=0, RHN='RBWB')
-    png(file.path(outdir,paste(gage,'screenb.png',sep="_")),width = 20, height=12,units='in',res=300)
-    screen.summary(res, type="b", StnInfo=ginfo)
-    dev.off()
-    png(file.path(outdir,paste(gage,'screenl.png',sep="_")),width = 20, height=12,units='in',res=300)
-    screen.summary(res, type="l", StnInfo=ginfo)
-    dev.off()
-    png(file.path(outdir,paste(gage,'screenh.png',sep="_")),width = 20, height=12,units='in',res=300)
-    screen.summary(res, type="h", StnInfo=ginfo)
-    dev.off()
-  })
-  #Fit Savitzky-Golay 1st order derivative
-  # p = polynomial order w = window size (must be odd) m = m-th derivative (0 = smoothing) 
-  d1 <- as.data.frame(savitzkyGolay(gts$Flow, p = 3, w = 21, m = 1)) 
-  #A shorter period than 21 days would be used but it seems like granularity of stage measurements at low flow makes them appear very constant
-  gts[11:(nrow(gts)-10),'sg.d1'] <- d1
-  gts[gts$sg.d1<(10^-10) & gts$sg.d1>-(10^-10) & !is.na(gts$sg.d1),'Flag'] <- 'Y'
-  
-  #Make raw time series plot
-  rawsgplot <-ggplot(gts, aes(x=Date, y=Flow)) + 
-    geom_point(color='#045a8d', size=1) + 
-    geom_point(data=gts[gts$Flag=='Y',],aes(x=Date, y=Flow), color='#d01c8b', size=1.5) +
-    geom_point(data=gts[gts$Flow==0,],aes(x=Date, y=Flow), color='#e31a1c', size=1.5) +
-    scale_y_sqrt()+
-    scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
-    labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - ")) +
-    theme_bw() + 
-    theme(axis.text.x = element_text(angle = 45, hjust=1))
-  png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
-  print(rawsgplot)
-  dev.off()
-}
+# for (gage in unique(rufidat_screenform$ID)) {
+#   print(gage)
+#   gname <- as.character(unique(rufidat[rufidat$Gage.ID==gage,'Station.Name']))
+#   #Generate FlowScreen time series
+#   gts<- create.ts(rufidat_screenform[rufidat_screenform$ID==gage,]) #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
+#   #Compute and output flowScreen metrics and plots
+#   try({
+#     res <- metrics.all(gts)
+#     ginfo <- data.frame(StationID=gage, StnName=gname, ProvState='Rufiji Basin',Country='Tanzania',Lat=0, Long=0, Area=0, RHN='RBWB')
+#     png(file.path(outdir,paste(gage,'screenb.png',sep="_")),width = 20, height=12,units='in',res=300)
+#     screen.summary(res, type="b", StnInfo=ginfo)
+#     dev.off()
+#     png(file.path(outdir,paste(gage,'screenl.png',sep="_")),width = 20, height=12,units='in',res=300)
+#     screen.summary(res, type="l", StnInfo=ginfo)
+#     dev.off()
+#     png(file.path(outdir,paste(gage,'screenh.png',sep="_")),width = 20, height=12,units='in',res=300)
+#     screen.summary(res, type="h", StnInfo=ginfo)
+#     dev.off()
+#   })
+#   #Fit Savitzky-Golay 1st order derivative
+#   # p = polynomial order w = window size (must be odd) m = m-th derivative (0 = smoothing) 
+#   d1 <- as.data.frame(savitzkyGolay(gts$Flow, p = 3, w = 21, m = 1)) 
+#   #A shorter period than 21 days would be used but it seems like granularity of stage measurements at low flow makes them appear very constant
+#   gts[11:(nrow(gts)-10),'sg.d1'] <- d1
+#   gts[gts$sg.d1<(10^-10) & gts$sg.d1>-(10^-10) & !is.na(gts$sg.d1),'Flag'] <- 'Y'
+#   
+#   #Make raw time series plot
+#   rawsgplot <-ggplot(gts, aes(x=Date, y=Flow)) + 
+#     geom_point(color='#045a8d', size=1) + 
+#     geom_point(data=gts[gts$Flag=='Y',],aes(x=Date, y=Flow), color='#d01c8b', size=1.5) +
+#     geom_point(data=gts[gts$Flow==0,],aes(x=Date, y=Flow), color='#e31a1c', size=1.5) +
+#     scale_y_sqrt()+
+#     scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+#     labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - ")) +
+#     theme_bw() + 
+#     theme(axis.text.x = element_text(angle = 45, hjust=1))
+#   png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
+#   print(rawsgplot)
+#   dev.off()
+# }
 
 #################################Clean out obviously spurious data in data from David Munkyala RBWB ###########################
 RBWBflow_clean <- RBWBflow
-###1KA9 KIMANI RIVER AT OLD GN: period prior to 1972 seems suspect, large variations with rate beyond range of time series.
-dm1KA9<- RBWBflow[RBWBflow$ID=='1KA9',]
+###1KA9 KIMANI RIVER AT OLD GN: amomalous peak flood nealry at 2x10^7 cms
+dm1KA9<- RBWBflow_clean[RBWBflow_clean$ID=='1KA9',]
 ggplot(dm1KA9, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
-RBWBflow_clean <- RBWBflow[!(RBWBflow$ID=='1KA9' & RBWBflow$Date<='1972-01-15'),]
+RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KA9' & RBWBflow_clean$Flow>10^6),]
+
+###1KA21A: LITTLE RUAHA AT IHIMBU: a few erroneous values
+dm1KA21A<- RBWBflow_clean[RBWBflow_clean$ID=='1KA21A',]
+#ggplot(dm1KA21A[dm1KA21A$Date>'1957-01-01' & dm1KA21A$Date<'1960-01-01',], aes(x=Date,y=Flow)) + geom_point() + scale_x_date(date_breaks='1 year') + theme(axis.text.x=element_text(angle=90))
+RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KA21A' & RBWBflow_clean$Date %in% as.Date(c('1968-05-29','1968-11-09', '1969-12-11','1959-07-31'))),]
+
+###1KA31: LITTLE RUAHA AT MAWANDE:
+dm1KA31<- RBWBflow_clean[RBWBflow_clean$ID=='1KA31',]
+#ggplot(dm1KA31[dm1KA31$Date>'2011-01-01' & dm1KA31$Date<'2019-01-01',], aes(x=Date,y=Flow)) + geom_point() + scale_x_date(date_breaks='1 year') + theme(axis.text.x=element_text(angle=90))
 
 ###1KA39A LITTLE RUAHA @ IWAWA: suspiciously low values in December 1964 (jump back to 10 cms on January 1st)
-dm1KA39A<- RBWBflow[RBWBflow$ID=='1KA39A',]
-ggplot(dm1KA39A, aes(x=Date,y=Flow)) + geom_point()
+dm1KA39A<- RBWBflow_clean[RBWBflow_clean$ID=='1KA39A',]
+#ggplot(dm1KA39A, aes(x=Date,y=Flow)) + geom_point()
 RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KA39A' & RBWBflow_clean$Flow<0.5),]
 
 ###1KB31 Kigogo-Ruaha @ Lugema (Mshongo): anomalously low values during peak periods
-dm1KB31 <- RBWBflow[RBWBflow$ID=='1KB31',]
+dm1KB31 <- RBWBflow_clean[RBWBflow_clean$ID=='1KB31',]
 setDT(dm1KB31)[, delta := shift(Flow, 1L, type="lead")-Flow,]
-ggplot(dm1KB31, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
-ggplot(dm1KB31, aes(x=Date,y=delta)) + geom_point()
+#ggplot(dm1KB31, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+#ggplot(dm1KB31, aes(x=Date,y=delta)) + geom_point()
 
 RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KB31' & 
                                      RBWBflow_clean$Date %in% as.Date(c('2001-03-11', '2001-04-30', '2002-02-15', '2002-03-09', '2002-03-22', '2002-03-23', '2002-03-25',
@@ -168,29 +177,29 @@ RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KB31' &
 ###1KB32 Kihansi @ Lutaki: anomalous fall in 2013, 2015
 dm1KB32 <- RBWBflow[RBWBflow$ID=='1KB32',]
 setDT(dm1KB32)[, delta := shift(Flow, 1L, type="lead")-Flow,]
-ggplot(dm1KB32[dm1KB32$Date>'2007-01-01',], aes(x=Date,y=Flow)) + geom_line() + scale_y_sqrt()
+#ggplot(dm1KB32[dm1KB32$Date>'2007-01-01',], aes(x=Date,y=Flow)) + geom_line() + scale_y_sqrt()
 RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KB32' & 
                                      RBWBflow_clean$Date %in% as.Date(c('2013-04-20', '2015-04-30'))),]
 
 ###1K3A Rufiji @ Stiegler's Gorge: unrealistic rises and falls (e.g. see March 1978) - cannot use data
 dm1K3A <- RBWBflow[RBWBflow$ID=='1K3A',]
-ggplot(dm1K3A, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+#ggplot(dm1K3A, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 
 #################################Clean out obviously spurious data in data from Japhet Kashaigili UDSM ###########################
 JKdat_clean <- JKdat
 #1KB27 Luipa @ Mbingu: some discontinuities in record (sudden falls) + some suddenly low values near zero (1964)
 jk1KB27 <- JKdat[JKdat$ID=='1KB27',]
-ggplot(jk1KB27[jk1KB27$Date>'1970-01-01',], aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+#ggplot(jk1KB27[jk1KB27$Date>'1970-01-01',], aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 JKdat_clean <- JKdat_clean[!(JKdat_clean$ID=='1KB27' & (JKdat_clean$Date>='1963-12-01' & JKdat_clean$Date<='1964-01-31') | JKdat_clean$Flow<2),]
 
 #1KB28: Kihansi @ Ludoga
 jk1KB28 <- JKdat[JKdat$ID=='1KB28',]
-ggplot(jk1KB28, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+#ggplot(jk1KB28, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 
 #BBM2: Udajaji River @ Bridge (E 0816580, N 9047210, UTM Zone N 36): not very useful, only a few sparse months of data.
 JKdat_clean[which(JKdat_clean$ID=='Udagaji' & !is.na(JKdat_clean$ID)),'ID'] <- 'BBM2'
 BBM2 <- JKdat_clean[JKdat_clean$ID=='BBM2',]
-ggplot(BBM2, aes(x=Date,y=Flow)) + geom_point()
+#ggplot(BBM2, aes(x=Date,y=Flow)) + geom_point()
 
 #################################Clean out obviously spurious data in cleaned out data from ZTE###########################
 rufidat_clean <- rufidat_screenform
@@ -216,13 +225,16 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA11A' & rufidat_clean$Date
 g1KA15A<-rufidat_clean[rufidat_clean$ID=='1KA15A',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA15A' & rufidat_clean$Date<'1968-01-01'),]
 
-###1KA21A	LITTLE RUAHA AT IHIMBU: data prior to 1967-11-23 area wonky 
+###1KA21A	LITTLE RUAHA AT IHIMBU: data prior to 1967-11-23 area wonky, use David Munkyala's data instead 
 g1KA21A<-rufidat_clean[rufidat_clean$ID=='1KA21A',]
-rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA21A' & rufidat_clean$Date<'1967-11-23'),]
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA21A'),]
 
 ###1KA22	MTITU AT MTITU: first few observations are spurious
 g1KA22<-rufidat_clean[rufidat_clean$ID=='1KA22',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA22' & rufidat_clean$Date<'1957-05-27'),]
+
+###1KA31: LITTLE RUAHA AT MAWANDE: Date pre-1970 are wonky, use David Munkyala's data instead
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA31'),]
 
 ###1KA32A	LITTLE RUAHA AT MAKALALA: remove all 0 values prior to 1970
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA32A' & rufidat_clean$Date<'1970-01-01' & rufidat_clean$Flow==0),]
@@ -232,11 +244,13 @@ g1KA37A<-rufidat_clean[rufidat_clean$ID=='1KA37A',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA37A' & rufidat_clean$Date<'1968-01-01'),]
 
 ###1KA41	KIZIGO AT ILANGALI: seems like there was a shift in bed morphology post-2000. Overestimated 0-flows lead to long period of constant
-#                             positive flow. Could also be some odd interpolation? 
-rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA41' & rufidat_clean$Date>'2000-01-01'),]
+#                             positive flow. Could also be some odd interpolation? Overestimated floods at the end of 1984
+g1KA41<-rufidat_clean[rufidat_clean$ID=='1KA41',]
+g1KA41_delist <- remove_constant(g1KA41)
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA41' & (rufidat_clean$Date>'2000-01-01' | rufidat_clean$Flow>500 |
+                                                                (rufidat_clean$Date %in% g1KA41_delist & rufidat_clean$Flow > 0))),]
 
-###1KA42A	KIZIGO RIVER AT CHINUGULU: Many instances of long zero flow period post 1993, could be due either to overwithdrawal or 
-#                                     shift in bed morphology leading to spurious zero flows
+###1KA42A	KIZIGO RIVER AT CHINUGULU: Many instances of long zero flow period post 1993. Not artefacts (according to conversation with RBWB) 
 
 ###1KA50B	MSWISWI AT WILIMA: according to ZTE: 'Records poor pre 1968, post 1999. Possible station moved in 1999?' consider removing pre-1968
 
@@ -283,7 +297,7 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB14A' & (rufidat_clean$Dat
                                                                  (rufidat_clean$Date %in% g1KB14A_delist))),] 
 ###1KB15A	MNGETA RIVER AT MCHOMBE: a few spurious low flow values. Less than 20 records.
 g1KB15A<-rufidat_clean[rufidat_clean$ID=='1KB15A',]
-rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB15A' & rufidat_clean$Flow < 5),] 
+rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB15A' & (rufidat_clean$Flow < 5 | rufidat_clean$Date == '1970-04-13')),] 
 
 ###1KB16C	FURUA AT MALINYI: seemingly spurious 0 values
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB16C' & rufidat_clean$Flow == 0),] 
@@ -307,15 +321,18 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow
 #(max spot measurement at 6cms, here flood at nearly 2500 cms, corresponding to 18m stage increase — implausible)
 #Some excessive peaks over 20cms during the short rains season pre-1985
 g1KB24<- rufidat_clean[rufidat_clean$ID=='1KB24',]
+ggplot(g1KB24[g1KB24$Date>'1972-01-01' & g1KB24$Date<'1975-01-01'], aes(x=Date,y=Flow)) + geom_point()
+
+
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB24' & rufidat_clean$Date<'1985-01-01'& rufidat_clean$Flow>20),] 
 
 #################################Merge datasets#############################################
 rufidat_all <- rbind(rufidat_screenform, 
-                        RBWBflow[RBWBflow$ID %in% c('1KA9','1KA39A','1KB31','1KB32'),], 
+                        RBWBflow[RBWBflow$ID %in% c('1KA9','1KA21A', '1KA31', '1KA39A','1KB31','1KB32'),], 
                         JKdat[JKdat$ID %in% c('1KB27','1KB28'),])
 
 rufidat_cleanall <- rbind(rufidat_clean, 
-                          RBWBflow_clean[RBWBflow_clean$ID %in% c('1KA9','1KA39A','1KB31','1KB32'),], 
+                          RBWBflow_clean[RBWBflow_clean$ID %in% c('1KA9','1KA21A', '1KA31','1KA39A','1KB31','1KB32'),], 
                           JKdat_clean[JKdat_clean$ID %in% c('1KB27','1KB28'),])
 
 #################################Create dataset of deleted values###########################
