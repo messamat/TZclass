@@ -10,7 +10,7 @@
 
 #Purpose: import and merge hydrological data for the Rufiji basin of Tanzania — provided by CDMSmith Zachary T. Eichenwald (ZTE) and Japhet Kashaigili (JK)
 
-devtools::install_github("awalker89/openxlsx")
+#devtools::install_github("awalker89/openxlsx")
 library(openxlsx)
 library(reshape2)
 library(DescTools)
@@ -82,13 +82,32 @@ for (sheet in 1:25) {
   flowdf$Date <- as.Date(flowdf$Date, origin='1899-12-30')
   RBWBflow <- rbind(RBWBflow, flowdf)
 }
+RBWBflow <- RBWBflow[RBWBflow$Gage.ID != '1KA31',]
+RBWBflow <- RBWBflow[RBWBflow$Gage.ID != '1KA9',]
+
+#Import updated 1KA31 data until end of 2017
+RBWB1KA31 <- read.xlsx(file.path(datadir,"RBWB_David20180430/flows data2.xlsx"),sheet=3,startRow=2, detectDates=F)
+colnames(RBWB1KA31) <- c('Date','Flow')
+RBWB1KA31$Gage.ID <- '1KA31'
+RBWB1KA31$Date <- as.Date(RBWB1KA31$Date, origin='1899-12-30')
+
+#Import full set of data for 1KA9 Kimani @ Great North Road
+RBWB1KA9 <- read.xlsx(file.path(datadir,"RBWB_David20180430/KIMANI FLOWS.xlsx"),sheet=1,startRow=3, detectDates=F)
+colnames(RBWB1KA9) <- c('Date','Flow')
+RBWB1KA9$Gage.ID <- '1KA9'
+RBWB1KA9$Date <- as.Date(RBWB1KA9$Date, origin='1899-12-30')
 
 #Import Stiegler's gorge data and join it to other David's data
 RBWB1K3A <- read.xlsx(file.path(datadir,"RBWB_David20180415/Rufiji river_Stiglers Gorge.xlsx"),sheet=1,startRow=3, detectDates=T)
 colnames(RBWB1K3A) <- c('Date', 'Flow')
 RBWB1K3A$Gage.ID <- '1K3A'
 RBWB1K3A <- RBWB1K3A[which(!(duplicated(RBWB1K3A[,c('Date','Gage.ID')]))),] #Remove duplicates
-RBWBflow <- rbind(RBWBflow, RBWB1K3A)
+
+#Merge all RBWB data from David Munkyala
+RBWBflow <- rbind(RBWBflow, RBWB1K3A, RBWB1KA31, RBWB1KA9)
+RBWBflow[RBWBflow$Flow=='m' & !is.na(RBWBflow$Flow),'Flow'] <- NA
+RBWBflow$Flow <- as.numeric(RBWBflow$Flow)
+RBWBflow <- RBWBflow[RBWBflow$Date<=max(RBWBflow[!is.na(RBWBflow$Flow),'Date']),]
 
 ##########################################################################################################################################
 ###Import daily data from Japhet K.
