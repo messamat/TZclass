@@ -12,10 +12,12 @@
 #N.B: here, filtering of gages based on environmental disturbance and non-stationarity is subsequent to analysis based on flow record length and overlap
 # in order to be as inclusive as possible.
 
+###### TO UPDATE SO AS NOT TO INCLUDE YEARS WITH DAYS OVERLAPPING 37 DAY GAPS ######
+### EVEN IN HOW NUMBER OF YEARS ARE COMPUTED ###
+
 library(ggplot2)
 library(data.table)
 library(FlowScreen)
-library(hydroTSM)
 library(reshape)
 library(plyr)
 library(lemon)
@@ -52,13 +54,16 @@ get_legend<-function(myggplot){
   return(legend)
 }
 
+#Import and format QA/QCed data
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
 rufidat_clean$year <- as.numeric(format(rufidat_clean$Date, "%Y"))
 rufidat_clean$month <- as.numeric(format(rufidat_clean$Date, "%m"))
 rufidat_clean<-hyear.internal(rufidat_clean,hyrstart=10) #Ignore hdoy
 
+#Import deleted records
 rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
 
+#Import rufiji river network environmental data
 # rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltab.csv'))
 # numcol <- colnames(rufienv)[which(sapply(rufienv, is.numeric))]
 # sumcol <-adply(rufienv[,numcol],2,function(x) sum(x, na.rm=T))
@@ -67,17 +72,28 @@ rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses
 # write.csv(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'),row.names=F)
 rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'))
 
-# gagesenv <- read.csv(file.path(getwd(),'gages_netjoin.csv'))
-# incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
-# gagesenv <- gagesenv[,incol] #Take out all 0 columns
-# write.csv(gagesenv, file.path(getwd(),'gages_netjoinclean.csv'),row.names=F)
+#Import gages environmental data
+gagesenv <- read.csv(file.path(getwd(),'gages_netjoin.csv'))
+incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
+gagesenv <- gagesenv[,incol] #Take out all 0 columns
+write.csv(gagesenv, file.path(getwd(),'gages_netjoinclean.csv'),row.names=F)
 gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv'))
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
-# write.csv(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180330.csv'),row.names=F)
+write.csv(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180515.csv'),row.names=F)
+
+#Import and format interpolated hydrological data
+impute_preds <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep(c('numeric','numeric','character'),39)))
+colnames(impute_preds)[seq(2,ncol(impute_preds),3)] <- substr(colnames(impute_preds),2,10)[seq(2,ncol(impute_preds),3)]
+
+predsmelt <-melt(setDT(as.data.frame(impute_preds)[,c(1,which(colnames(impute_preds) %like% "^1K*"))]),id.vars = 'Date',value.name='Flow',variable.name='ID')
+predsmelt <- predsmelt[,c(2,1,3)]
+predsmelt$SYM <- NA
+predsmelt$Agency <- NA
+predsmelt <- predsmelt[!is.na(predsmelt$Flow),]
 
 #######UPDATE NEEDED, MAKE SURE THAT FACTOR COLUMNS REMAIN SO#########################
 ##########################################
-#BUild summary tables
+#Build summary tables
 rufidat_dt <- data.table(rufidat_clean)
 
 rufidat_datesummary <- rufidat_dt[,list(length(unique(ID))), .(Date)] #Compute number of gages with data for each date
@@ -107,9 +123,9 @@ rufidat_summary <- rufidat_dt[,list(min_hyear=min(hyear), max_hyear=max(hyear), 
 #regarding yearly record
 rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(hyear, "12", "31", sep="-")), "%j"))-length(unique(Date)), #Check the number of days in that year to account for leap years
                                        gap_per=1-(length(unique(Date))/as.numeric(format(as.Date(paste(hyear, "12", "31", sep="-")), "%j"))),
-                                       max_gap = max(gapyr,na.rm=T))
+                                       max_gap = max(gap,na.rm=T), max_gapyr = max(gapyr,na.rm=T))
                                  ,.(ID,hyear)]
-#write.csv(rufidat_gapsummary, file.path(outdir, 'rufidat_gapsummary.csv'), row.names=F)
+write.csv(rufidat_gapsummary, file.path(outdir, 'rufidat_gapsummary.csv'), row.names=F)
 
 ##################################Overall figure of record (record_overview)############
 record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
@@ -123,16 +139,16 @@ record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
   theme_classic() + 
   theme(text=element_text(size=24),
         axis.text.x = element_text(angle = 45, hjust=1))
-png(file.path(outdir,'record_overview20180403.png'),width = 20, height=12,units='in',res=300)
+png(file.path(outdir,'record_overview20180515.png'),width = 20, height=12,units='in',res=300)
 print(record_overview)
 dev.off()
 
 rufidat_cleanenv <- merge(rufidat_clean, gagesenv, by.x='ID', by.y='RGS_No')
-rufidat_cleanenv$label <- as.factor(paste(rufidat_cleanenv$RGS_Loc," at ", rufidat_cleanenv$RGS_Name,sep=""))
+rufidat_cleanenv$label <- as.factor(paste(rufidat_cleanenv$RGS_Loc,"River at", rufidat_cleanenv$RGS_Name,"-", rufidat_cleanenv$ID, sep=" "))
 rufidat_cleanenv$label <- factor(rufidat_cleanenv$label, levels = unique(rufidat_cleanenv$label[order(rufidat_cleanenv$Date)]))
 record_overview_name <-ggplot(data=rufidat_cleanenv, aes(x=Date, y=label)) +
   geom_point(size=2) +
-  geom_bar(data=rufidat_datesummary, aes(x=Date,y='Mgugwe at Mgugwe',color=V1), stat='identity') +
+  geom_bar(data=rufidat_datesummary, aes(x=Date,y='Mgugwe River at Mgugwe - 1KB36',color=V1), stat='identity') +
   geom_point(size=2) +
   scale_x_date(breaks=as.Date(paste(c(seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
   scale_y_discrete(name='Gauge name') + 
@@ -141,15 +157,16 @@ record_overview_name <-ggplot(data=rufidat_cleanenv, aes(x=Date, y=label)) +
   theme_classic() +
   theme(text=element_text(size=20),
         axis.text.x = element_text(angle = 45, hjust=1))
-png(file.path(outdir,'record_overview20180405_names.png'),width = 20, height=12,units='in',res=300)
+png(file.path(outdir,'record_overview20180515_names.png'),width = 20, height=12,units='in',res=300)
 print(record_overview_name)
 dev.off()
 
 ##################################Gap plot################
-#Compute number of valid years on record depending on the percentage of missing data tolerated to consider a year valid
+#Compute number of valid years on record depending on the percentage of missing data tolerated to consider a year valid and the corresponding
+#maximum gap.
 rufidat_gapyear <- data.frame(ID=unique(rufidat_gapsummary$ID))
 for (i in seq(0.5,0,-0.1)) {
-  df<-ddply(rufidat_gapsummary[rufidat_gapsummary$gap_per<=i,], .(ID), summarise, gcount=length(hyear))
+  df<-ddply(rufidat_gapsummary[rufidat_gapsummary$gap_per<=i & rufidat_gapsummary$max_gap<=(i*365.25),], .(ID), summarise, gcount=length(hyear))
   rufidat_gapyear <- merge(rufidat_gapyear,df, by='ID',all.x=T)
 }
 colnames(rufidat_gapyear) <- c('ID',paste('gagecount_gap', seq(0.5,0,-0.1),sep="_"))
@@ -160,16 +177,17 @@ rufidat_gapplot$minyr <- sort(rep(seq(5,50,1), ncol(rufidat_gapyear[,2:ncol(rufi
 rufidat_gapplot$threshgap <- as.numeric(substr(rufidat_gapplot$X1,15,18))
 
 gapplot <- ggplot(rufidat_gapplot, aes(x=minyr, y=V1, color=as.factor(100*threshgap))) + 
-  scale_x_continuous(name='Record length (years)', breaks=seq(5,50,5), expand=c(0,0)) +
-  scale_y_continuous(name='Number of gauges', limits=c(0,35), breaks=seq(0,35,5),expand=c(0,0))+
+  scale_x_continuous(name='Record length (years)', breaks=seq(5,60,5), expand=c(0,0)) +
+  scale_y_continuous(name='Number of gauges', limits=c(0,40), breaks=seq(0,40,5),expand=c(0,0))+
   scale_color_discrete(name="Maximum length of missing records each year (%)") +
   guides(color=guide_legend(ncol=4)) +
   geom_line(size=1) +
   theme_classic() + 
   theme(text=element_text(size=24),
         legend.position=c(0.65,0.85),
-        legend.background = element_blank())
-png(file.path(outdir,'gapplot20180403.png'),width = 12, height=12,units='in',res=300)
+        legend.background = element_blank(),
+        plot.margin = unit(c(0.5,0.5,0.5,0.5), "cm"))
+png(file.path(outdir,'gapplot20180517.png'),width = 12, height=12,units='in',res=300)
 print(gapplot)
 dev.off()
 
@@ -226,77 +244,59 @@ reposition_legend(overlapplot_out, 'left', panel='panel-3-3')
 dev.off()
 
 #Check best date of period based on a set of requirements
-tryoverlap<-overlapplot[period_len>=25 & minyr>=10 & completeness>=0.5 & count>=15 & cyr>=1990 & cyr<=2018-15]
+tryoverlap<-overlapplot[period_len>=30 & minyr>=15 & completeness>=0.25 & count>=15 & cyr>=1990 & cyr<=2018-15]
 print(tryoverlap)
-
-#################################Visualize correlation among gages########
-
-over5yr <- as.character(rufidat_gapyear[rufidat_gapyear$gagecount_gap_0.1>10,'ID']) #Only keep gages with at least 5 years of data (as otherwise correlation does not run)
-rufidat_clean$Flowlog <- log(rufidat_clean$Flow+0.01)
-rufidat_cast <- dcast(rufidat_clean[rufidat_clean$ID %in% over5yr,], Date~ID, value.var='Flowlog')
-#png(file.path(outdir,'hydropairs.png'),width=40, height=40,units='in',res=300)
-#hydropairs(rufidat_cast, dec=3, use="pairwise.complete.obs", method="pearson")
-#dev.off()
 
 #####################################################################
 #Select subset of gages to be used in the analysis
 #####################################################################
-#Have over 10 years of 90% complete data from 1991/10/01 to 2016/09/30
-rufidat_post1991 <- rufidat_gapsummary[gap_per<=0.1 & hyear>=1991,length(unique(hyear)),.(ID)]
+#Have over 10 years of 90% complete data from 1991/10/01 
+rufidat_post1991 <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37 & hyear>=1991,length(unique(hyear)),.(ID)] #For each gauge, compute number of years after 1991 with at least 90% of data
 colnames(rufidat_post1991) <- c('ID','ycount1991')
-rufidat_post1991[rufidat_post1991$ycount>=15,]
+rufidat_post1991[rufidat_post1991$ycount>=10,] #Check stations with at least 15 years
 write.csv(rufidat_post1991, file.path(outdir, 'gageselect_post1991comp90.csv'), row.names=F)
-gageselect1991 <- rufidat_post1991[rufidat_post1991$ycount>=10,]
+gageselect1991 <- rufidat_post1991[rufidat_post1991$ycount>=10,] #Select gages with at least 10 years of data from 1991-2016
 
-rufidat_post2001 <- rufidat_gapsummary[gap_per<=0.1 & hyear>=2001,lengths(unique(hyear)),.(ID)]
+rufidat_post2001 <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37 & hyear>=2001,length(unique(hyear)),.(ID)] #For each gauge, compute number of years after 2001 with at least 90% of data
 colnames(rufidat_post2001) <- c('ID','ycount2001')
-rufidat_post2001[rufidat_post2001$ycount>=15,]
+rufidat_post2001[rufidat_post2001$ycount>=10,]
 write.csv(rufidat_post2001, file.path(outdir, 'gageselect_post2001comp90.csv'), row.names=F)
 gageselect2001 <- rufidat_post2001[rufidat_post2001$ycount>=10,]
 
-#Have over 10 years of 90% complete data from 2001/10/01 to 2016/09/30
-rufidat_o15y <- rufidat_gapyear[!is.na(rufidat_gapyear$gagecount_gap_0.1),c('ID', 'gagecount_gap_0.1')]
+#Have over 15 years over the length of record
+rufidat_o15y <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37,length(unique(hyear)),.(ID)]
 colnames(rufidat_o15y) <- c('ID','ycount_o15')
 write.csv(rufidat_o15y, file.path(outdir, 'gageselect_o15comp90.csv'), row.names=F)
-gageselect_o15y <- rufidat_o15y[rufidat_o15y$ycount>=15,]
 
 ####
 rufidat_clean <- merge(rufidat_clean, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
-rufidat_clean <- merge(rufidat_clean, rufidat_post1991, by='ID',all.x=T)
+#rufidat_clean <- merge(rufidat_clean, rufidat_post1991, by='ID',all.x=T)
 
 #######################################################################
 #Plot clean and interpolated data
 #######################################################################
-impute_preds <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
-colnames(impute_preds)[2:(ncol(impute_preds))] <- substr(colnames(impute_preds),2,10)[2:(ncol(impute_preds))]
-
-predsmelt <-melt(setDT(impute_preds),id.vars = 'Date',value.name='Flow',variable.name='ID')
-predsmelt <- predsmelt[,c(2,1,3)]
-predsmelt$SYM <- NA
-predsmelt$Agency <- NA
-
 ##################################Get example legend ######
 gage='1KA9'
 print(gage)
 genv <- gagesenv[gagesenv$RGS_No==gage,]
 #Generate FlowScreen time series
-gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
-gts_sel <- merge(gts, rufidat_post1991, by='ID', all.x=T)
-gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Selected data from 1991 to 2016: ", unique(gts_sel$ycount)," years.",sep="")
+gts<- create.ts(predsmelt[predsmelt$ID==gage & !is.na(predsmelt$Flow),])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
+gts_sel <- merge(gts,  rufidat_gapyear[!is.na(rufidat_gapyear$gagecount_gap_0.1),c('ID', 'gagecount_gap_0.1')], by='ID', all.x=T)
+gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Selected data: ", unique(gts_sel$gagecount_gap_0.1)," years.",sep="")
 
 #Make raw time series plot
 template <-ggplot() +
-  geom_point(data=gts_sel, aes(x=Date, y=Flow, color='brown'), size=1.5) + 
+  geom_point(data=gts_sel, aes(x=Date, y=Flow, color='brown'), size=1.5)+ 
   geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow,color='red'), size=1.5)+
   geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow,color='lightblue'), size=1.5)+
-  geom_point(data=rufidat_clean[rufidat_clean$ID==gage&rufidat_clean$hyear>=1991&
-                                  rufidat_clean$ycount>=10&rufidat_clean$gap_per<=0.1,], 
+  geom_point(data=rufidat_clean[rufidat_clean$ID==gage & 
+                                  rufidat_clean$hyear %in%  as.data.frame(rufidat_gapsummary)[rufidat_gapsummary$ID==gage & rufidat_gapsummary$gap_per<=0.1,'hyear'],],
              aes(x=Date, y=Flow,color='darkblue'), size=1.5)+
   scale_colour_manual(name='Hydrologic record',
                       values =c('brown'='#bf812d','red'='#e31a1c','lightblue'='#9ecae1','darkblue'='#045a8d'),
                       labels = c('Interpolated','Used in classification','Not used in classification','Deleted')) +
   scale_y_sqrt(expand=c(0,0),limits=c(0,max(gts$Flow)+1))+
-  scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits=as.Date(c('1954-01-01','2018-06-01')), expand=c(0,0)) + 
   labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - "))+
   theme_bw() + 
   theme(axis.text.x = element_text(angle = 45, hjust=1))
@@ -305,32 +305,35 @@ print(template)
 legendts <- get_legend(template)
 
 ##################################Plot 'em #############
-plotseries <- function(gage){ #Make a graph of a time series highlightinh delete, interpolated, used and non-used data
+plotseries <- function(gage){ #Make a graph of a time series highlighting deleted, interpolated, used and non-used data
   print(gage)
   genv <- gagesenv[gagesenv$RGS_No==gage,]
   #Generate FlowScreen time series
   gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
-  gts_sel <- merge(gts, rufidat_post1991, by='ID', all.x=T)
+  gts_sel <- merge(gts, rufidat_o15y, by='ID', all.x=T)
   gts_sel <- merge(gts_sel, rufidat_gapsummary[,c('ID','hyear','gap_per')], by=c('ID','hyear'))
-  gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Data from 1991 to 2016: ", unique(gts_sel$ycount)," years.",sep="")
+  gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Selected data from 1954 to 2018: ", unique(gts_sel$ycount_o15)," years.",sep="")
   #Make raw time series plot
   rawsgplot <-ggplot() +
-    geom_point(data=gts_sel[gts_sel$gap_per<=0.1,], aes(x=Date, y=Flow),color='#bf812d', size=1.5)+ 
-    geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow),color='#e31a1c',size=1.5) +
-    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow),color='#9ecae1',size=1.5) +
-    geom_point(data=rufidat_clean[rufidat_clean$ID==gage&rufidat_clean$hyear>=1991&rufidat_clean$ycount>=10&rufidat_clean$gap_per<=0.1,], 
-               aes(x=Date, y=Flow),color='#045a8d', size=1.5) +
+    geom_point(data=gts_sel, aes(x=Date, y=Flow), color='#bf812d', size=1.5)+ 
+    geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow),color='#e31a1c', size=1.5)+
+    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow),color='#9ecae1', size=1.5)+
+    geom_point(data=rufidat_clean[rufidat_clean$ID==gage & 
+                                    rufidat_clean$hyear %in%  as.data.frame(rufidat_gapsummary)[rufidat_gapsummary$ID==gage & rufidat_gapsummary$gap_per<=0.1,'hyear'],],
+               aes(x=Date, y=Flow),color='#045a8d', size=1.5)+
     scale_y_sqrt(expand=c(0,0),limits=c(0,max(gts$Flow)+1))+
-    scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits=as.Date(c('1954-01-01','2018-06-01')), expand=c(0,0)) + 
     labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - ")) +
     theme_bw() + 
-    theme(axis.text.x = element_text(angle = 45, hjust=1))
+    theme(axis.text.x = element_text(angle = 45, hjust=1),
+          legend.position = 'none')
   p <- ggplot_gtable(ggplot_build(rawsgplot))
   lay= t(c(rep(1,10),2))
   png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
   print(grid.arrange(p, legendts, ncol = 11, layout_matrix = lay))
   dev.off()
 }
+
 plotflowscreen <- function(gage, div,thrs){ #make graphs of FlowScreen package outputs
   print(gage)
   genv <- gagesenv[gagesenv$RGS_No==gage,]
@@ -360,25 +363,16 @@ for (g in unique(predsmelt$ID)) {
   plotflowscreen(g,div=1,thrs=0.5)
 }
 
-#'1KA41A':Kendall
-#'1KA42A':Kendall
-#'1KA59':Kendall
-#'1KA71':BINSEG
-#'1KB15A':error in graphics 'at' and 'labels' lengths differ
-#'1BK17A':BINSEG
-#'1KB4A': BINSEG
-#'1KA33B':error
-
 ##################################Report statistics#######################
 mean(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
 min(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
 max(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
-"On average, gauges contained 40 years of daily discharge data (min = 2 years, max = 63 years)"
+"On average, gauges contained 39 years of daily discharge data (min = 2 years, max = 64 years)"
 
 mean(rufidat_gapsummary$gap_per)
 min(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
 max(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
-"The average percentage of missing data per year across all gauges was 15% (min=2%, max=59%)." 
+"The average percentage of missing data per year across all gauges was 14% (min=1%, max=59%)." 
 
 mean(rufidat_select_o15y$ycount_o15)
 
@@ -461,7 +455,7 @@ envplot <- function(selected_gages, plotname) {
   rufienv$CatGeolMaj <- factor(rufienv$CatGeolMaj, levels = unique(rufienv$CatGeolMaj[order(as.numeric(as.character(rufienv$CatGeolMaj)))]))
   envplot_geol <-  ggplot(rufienv, aes(x=CatGeolMaj)) + 
     geom_bar(fill='#8c510a', alpha=0.4, stat='count') +
-    geom_bar(data=gagesenvrec, aes(color=select),fill='white',alpha=0.4, size=0.75) +
+    geom_bar(data=gagesenvrec, aes(x=as.factor(CatGeolMaj), color=select),fill='white',alpha=0.4, size=0.75) +
     scale_x_discrete(name=expression('Main catchment lithology (GMIS number)')) +
     scale_y_continuous(trans='log10',name='Number of reaches') + 
     scale_color_manual(values=c(notselRGB,selRGB))+
@@ -480,8 +474,8 @@ envplot <- function(selected_gages, plotname) {
   #envplot_pop
   
   
-  envplot_forlos <- ggplot(rufienv, aes(x=100*WsFLosSum_)) + 
-    geom_vline(data=gagesenvrec, aes(xintercept=100*WsFLosSum_, color=select),alpha=0.5, size=0.75) +
+  envplot_forlos <- ggplot(rufienv, aes(x=100*WsFLosSum_1)) + 
+    geom_vline(data=gagesenvrec, aes(xintercept=100*WsFLosSum_1, color=select),alpha=0.5, size=0.75) +
     geom_histogram(bins=50,fill='#bf812d', alpha=0.6) + 
     scale_x_sqrt(name=expression('Upstream forest loss (% area)'),
                  breaks=c(0,1,5,10,25,50,75,100),
@@ -594,11 +588,6 @@ ggplot(pcoa_scores, aes(x = PC1, y = PC2, label = rownames(pcoa_scores))) + geom
   
   
   ggplot(arrows) + geom_segment(aes(x = rep(0, 13), y = rep(0, 13), xend = Dim1 , yend = Dim2))
-
-
-##########################################
-#To do:
-#Evaluate consistency of discharge with drainage area and precipitation + HydroSHEDS modeled data
 
 ###########################################
 #Extra: 
