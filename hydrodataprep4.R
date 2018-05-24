@@ -67,18 +67,18 @@ na.lomb <- function(x) {
 }
 
 #################################Visualize correlation among gages########
-# rufidat_clean$Flowlog <- log(rufidat_clean$Flow+0.01)
-# setDT(rufidat_clean)[,ndays:=length(unique(Date)),.(ID)]
-# rufidat_castlog <- dcast(rufidat_clean[rufidat_clean$ndays>=10000,], Date~ID, value.var='Flowlog')
-# png(file.path(outdir,'hydropairs.png'),width=40, height=40,units='in',res=300)
-# hydropairs(as.data.frame(rufidat_castlog), dec=3, use="pairwise.complete.obs", method="pearson")
-# dev.off()
-# row.names(rufidat_castlog) <- rufidat_castlog$Date
-# rufidat_castlog <- rufidat_castlog[,-1]
-# library(Hmisc)
-# corrtab <- rcorr(as.matrix(rufidat_castlog), type="pearson")
-# corrtab_r <- corrtab$r
-# corrtab_p <- corrtab$P
+rufidat_clean$Flowlog <- log(rufidat_clean$Flow+0.01)
+setDT(rufidat_clean)[,ndays:=length(unique(Date)),.(ID)]
+rufidat_castlog <- dcast(rufidat_clean[rufidat_clean$ndays>=10000,], Date~ID, value.var='Flowlog')
+png(file.path(outdir,'hydropairs.png'),width=40, height=40,units='in',res=300)
+hydropairs(as.data.frame(rufidat_castlog), dec=3, use="pairwise.complete.obs", method="pearson")
+dev.off()
+row.names(rufidat_castlog) <- rufidat_castlog$Date
+rufidat_castlog <- rufidat_castlog[,-1]
+library(Hmisc)
+corrtab <- rcorr(as.matrix(rufidat_castlog), type="pearson")
+corrtab_r <- corrtab$r
+corrtab_p <- corrtab$P
 
 
 ########################## Interpolate data with na.interp ########################
@@ -103,7 +103,8 @@ CustomImpute_nainterp <- function(tscast, sn, maxgap,pplot=F) {
     #Bound interpolation to min and max if outside bound of record
     pred_try[pred_try$pred<min(tscastsub[,sn],na.rm=T),'pred'] <- min(tscastsub[,sn],na.rm=T) #if interpolated value is outside bound, bound it
     pred_try[pred_try$pred>max(tscastsub[,sn],na.rm=T),'pred'] <- max(tscastsub[,sn],na.rm=T)
-  
+    #Round abnormally low discharge values to 0
+    pred_try[pred_try$pred<0.01,'pred'] <- 0
     #Create output dataframe
     out<-data.frame(tscastsub[,'Date'],pred_try$pred, tscastsub$gap)
     gapcol <- paste('gap',colnames(tscastsub)[sn],sep='_') 
@@ -164,10 +165,6 @@ impute_preds <- interpcor(impute_preds, '1KB18B', as.Date(c('1987-05-17', '1987-
 impute_preds <- interpcor(impute_preds, '1KB17A', as.Date(c('1972-08-13', '1973-06-02', '1973-06-27', '1974-06-15', '1976-06-06', '1977-06-16', '1977-08-12', '1978-06-01',
                                             '1978-06-26', '1979-05-30')))
 
-#
-bugval <- impute_preds[impute_preds$Date=='1995-09-06','1KA41']
-impute_preds[impute_preds$`1KA41`<0.01 & !is.na(impute_preds$`1KA41`), '1KA41'] <- 0
-
 write.csv(impute_preds, file.path(outdir, 'rufidat_interp.csv'), row.names=F)
 impute_preds <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep(c('numeric','numeric','character'),39)))
 colnames(impute_preds)[seq(2,ncol(impute_preds),3)] <- substr(colnames(impute_preds),2,10)[seq(2,ncol(impute_preds),3)]
@@ -178,58 +175,107 @@ dodoprecip <- openxlsx::read.xlsx(file.path(origdatadir,"RBWB_David20180430/Dodo
 dodoprecip$Date <- gsub(" ","", dodoprecip$Date)
 dodoprecip$Date <- as.Date(as.character(dodoprecip$Date), format="%d/%m/%Y")
 dodoprecip[dodoprecip$mm==-9.9,'mm'] <- NA
-ggplot(dodoprecip[dodoprecip$Date<'1940-01-01',], aes(x=Date, y=mm)) + geom_line() + scale_y_sqrt()
-#Need to change from 0.01 to 0
+#ggplot(dodoprecip[dodoprecip$Date<'1940-01-01',], aes(x=Date, y=mm)) + geom_line() + scale_y_sqrt()
 
-##############For 1KA41
+##############For 1KA41 (did not functionalize workflow to check intermediate steps)
 precip1KA41 <- merge(impute_preds[,c('Date','1KA41')], dodoprecip, by='Date')
 colnames(precip1KA41) <- c('Date','Flow','Precip')
 
-#Try lm
-# fit <- lm(Flow~Precip,data=precip1KA41)
-# summary(fit)
-# ggplot(precip1KA41, aes(x=Precip, y=Flow)) + geom_point() + geom_smooth()
-
-#Create time series
+#Exclude NAs outside of the period of record
 mindate <- precip1KA41[min(which(!is.na(precip1KA41[,'Flow']))),'Date']
 maxdate <- precip1KA41[max(which(!is.na(precip1KA41[,'Flow']))),'Date']
 precip1KA41sub <- precip1KA41[precip1KA41$Date>mindate & precip1KA41$Date<maxdate,]
-#Compute size of gap a record belongs to
+#Compute size of gap each record belongs to
 precip1KA41sub$prevdate <- precip1KA41sub[na.lomf(precip1KA41sub[,'Flow']),'Date']
 precip1KA41sub$nextdate <- precip1KA41sub[na.lomb(precip1KA41sub[,'Flow']),'Date']
 precip1KA41sub$prevgap <- as.numeric(precip1KA41sub$Date-as.Date(precip1KA41sub$prevdate))
 precip1KA41sub$nextgap <- as.numeric(as.Date(precip1KA41sub$nextdate)-precip1KA41sub$Date)
 precip1KA41sub$gap <- as.numeric(as.Date(precip1KA41sub$nextdate)-as.Date(precip1KA41sub$prevdate))
 precip1KA41sub <- as.data.frame(precip1KA41sub)
-#Try with Fourier in response to https://robjhyndman.com/hyndsight/longseasonality/
+#Develop ARIMAX model with Fourier series added as external regressors to model the seasonal pattern
+#and precipitation as a second external regressor.ARIMA (in R at least) cannot model seasonal periods > 350.
+#Inspired from https://robjhyndman.com/hyndsight/longseasonality/
 #and https://robjhyndman.com/hyndsight/forecasting-weekly-data/
 ts1KA41 <- msts(precip1KA41sub[, 'Flow'],seasonal.periods=365.25)
 bestfit <- list(aicc=Inf)
-for(i in 1:50)
+for(i in 1:50) #Select the number of Fourier series by minimizing AIC 
 {
   fit <- auto.arima(ts1KA41, seasonal=FALSE, xreg=cbind(fourier(ts1KA41, K=i), precip1KA41sub[, 'Precip']))
   if(fit$aicc < bestfit$aicc){
     print(i)
-    bestfit <- fit
+    bestfit <- fit #Keep model with lowest AIC
   }else {break};
 }
-kr <- KalmanSmooth(ts1KA41, bestfit$model)
-id.na <- which(is.na(ts1KA41))
+kr <- KalmanSmooth(ts1KA41, bestfit$model) #Impute missing values with Kalman Smoother (from https://stats.stackexchange.com/questions/104565/how-to-use-auto-arima-to-impute-missing-values)
+id.na <- which(is.na(ts1KA41) & precip1KA41sub$gap<274) #Limit to gaps < 6 months
 pred <- ts1KA41
 for (i in id.na)
   pred[i] <- bestfit$model$Z %*% kr$smooth[i,]
-precip1KA41sub[id.na,'Flow'] <- pred[id.na]
-precip1KA41sub[precip1KA41sub$Flow<0,'Flow'] <- 0
-ggplot(precip1KA41sub[,], aes(x=Date, y=Flow)) + geom_point() +
+precip1KA41sub[id.na,'Flow'] <- pred[id.na] #Replace NA values in the time series by predicted values
+precip1KA41sub[precip1KA41sub$Flow<0.05 & !is.na(precip1KA41sub$Flow),'Flow'] <- 0 #For values < 0 and improbably low values, replace with 0
+ggplot(precip1KA41sub[,], aes(x=Date, y=Flow)) + geom_point() + #Plot result
   geom_point(data=precip1KA41sub[id.na,], color='red')
 
+ggplot(precip1KA41sub[,], aes(x=Date, y=Flow, color=gap)) + geom_point() +
+  scale_colour_distiller(name='Gap (years)',palette='Spectral',breaks=seq(0,365.25,30),
+                         limits=c(min(precip1KA41sub$gap),max(precip1KA41sub$gap)))#Plot result
+
+impute_preds2 <- merge(impute_preds, precip1KA41sub[,c('Date','Flow')], by='Date', all.x=T)
+impute_preds2[impute_preds2$Date>mindate & impute_preds2$Date<maxdate,'1KA41'] <- impute_preds2[impute_preds2$Date>mindate & impute_preds2$Date<maxdate,'Flow']
+impute_preds2 <- impute_preds2[,-which(colnames(impute_preds2)=='Flow')]
+impute_preds2[impute_preds2$gap_1KA41>=37 & impute_preds2$gap_1KA41<274 & !is.na(impute_preds2$gap_1KA41), 'source_1KA41'] <- 'ARIMAX_interpolated'
+
 ##############For 1KA42
+precip1KA42 <- merge(impute_preds[,c('Date','1KA42A')], dodoprecip, by='Date', all.x=T)
+colnames(precip1KA42) <- c('Date','Flow','Precip')
+precip1KA42 <- merge(precip1KA42, impute_preds[,c('Date','1KA41')], by='Date', all.x=T)
 
+#Exclude NAs outside of the period of record
+mindate <- precip1KA42[min(which(!is.na(precip1KA42[,'Flow']))),'Date']
+maxdate <- precip1KA42[max(which(!is.na(precip1KA42[,'Flow']))),'Date']
+precip1KA42sub <- precip1KA42[precip1KA42$Date>mindate & precip1KA42$Date<maxdate,]
+#Compute size of gap each record belongs to
+precip1KA42sub$prevdate <- precip1KA42sub[na.lomf(precip1KA42sub[,'Flow']),'Date']
+precip1KA42sub$nextdate <- precip1KA42sub[na.lomb(precip1KA42sub[,'Flow']),'Date']
+precip1KA42sub$prevgap <- as.numeric(precip1KA42sub$Date-as.Date(precip1KA42sub$prevdate))
+precip1KA42sub$nextgap <- as.numeric(as.Date(precip1KA42sub$nextdate)-precip1KA42sub$Date)
+precip1KA42sub$gap <- as.numeric(as.Date(precip1KA42sub$nextdate)-as.Date(precip1KA42sub$prevdate))
+precip1KA42sub <- as.data.frame(precip1KA42sub)
+#Develop ARIMAX model with Fourier series added as external regressors to model the seasonal pattern
+#and precipitation as a second external regressor.ARIMA (in R at least) cannot model seasonal periods > 350.
+#Inspired from https://robjhyndman.com/hyndsight/longseasonality/
+#and https://robjhyndman.com/hyndsight/forecasting-weekly-data/
+ts1KA42 <- msts(precip1KA42sub[, 'Flow'],seasonal.periods=365.25)
+bestfit <- list(aicc=Inf)
+for(i in 1:50) #Select the number of Fourier series by minimizing AIC 
+{
+  fit <- auto.arima(ts1KA42, seasonal=FALSE, xreg=cbind(fourier(ts1KA42, K=i))) #, precip1KA42sub[, 'Precip']
+  if(fit$aicc < bestfit$aicc){
+    print(i)
+    bestfit <- fit #Keep model with lowest AIC
+  }else {break};
+}
+kr <- KalmanSmooth(ts1KA42, bestfit$model) #Impute missing values with Kalman Smoother (from https://stats.stackexchange.com/questions/104565/how-to-use-auto-arima-to-impute-missing-values)
+id.na <- which(is.na(ts1KA42) & precip1KA42sub$gap<274)
+pred <- ts1KA42
+for (i in id.na)
+  pred[i] <- bestfit$model$Z %*% kr$smooth[i,]
+precip1KA42sub[id.na,'Flow'] <- pred[id.na] #Replace NA values in the time series by predicted values
+precip1KA42sub[precip1KA42sub$Flow<0.05 & !is.na(precip1KA42sub$Flow),'Flow'] <- 0 #For values < 0, replace with 0
+ggplot(precip1KA42sub[,], aes(x=Date, y=Flow)) + geom_point() + #Plot result
+  geom_point(data=precip1KA42sub[id.na,], color='red')
 
+impute_preds2 <- merge(impute_preds2, precip1KA42sub[,c('Date','Flow')], by='Date', all.x=T)
+impute_preds2[impute_preds2$Date>mindate & impute_preds2$Date<maxdate,'1KA42A'] <- impute_preds2[impute_preds2$Date>mindate & impute_preds2$Date<maxdate,'Flow']
+impute_preds2 <- impute_preds2[,-which(colnames(impute_preds2)=='Flow')]
+impute_preds2[impute_preds2$gap_1KA42A>=37 & impute_preds2$gap_1KA42A<274 & !(is.na(impute_preds2$gap_1KA42A)), 'source_1KA42A'] <- 'ARIMAX_interpolated'
+
+impute_preds <- impute_preds2
+write.csv(impute_preds, file.path(outdir, 'rufidat_interp.csv'), row.names=F)
 
 #############################################################################################################
 #Plot clean and interpolated data
-predsmelt <-melt(setDT(impute_preds),id.vars = 'Date',value.name='Flow',variable.name='ID')
+predsmelt <-melt(setDT(as.data.frame(impute_preds)[,c(1,which(colnames(impute_preds) %like% "^1K*"))]),id.vars = 'Date',value.name='Flow',variable.name='ID')
 predsmelt <- predsmelt[,c(2,1,3)]
 predsmelt$SYM <- NA
 predsmelt$Agency <- NA
@@ -245,17 +291,38 @@ for (gage in unique(predsmelt$ID)) {
     #geom_rect(aes(xmin=as.Date('2001-10-01'), xmax=as.Date('2016-10-01'), ymin=min(gts$Flow-1), ymax=max(gts$Flow+1)), fill='#ffffbf', alpha=0.1) +
     geom_point(color='#bf812d', size=1.5)+ 
     geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,],aes(x=Date, y=Flow), color='#e31a1c', size=1.5) +
-    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], color='#9ecae1', size=1.5) +
-    geom_point(data=rufidat_clean[rufidat_clean$ID==gage & rufidat_clean$Date>'2001-10-01',], color='#045a8d', size=1.5) +
+    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], color='#045a8d', size=1.5) +
+    #geom_point(data=rufidat_clean[rufidat_clean$ID==gage & rufidat_clean$Date>'2001-10-01',], color='#045a8d', size=1.5) +
     scale_y_sqrt(expand=c(0,0))+
     scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
     labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - ")) +
     theme_bw() + 
     theme(axis.text.x = element_text(angle = 45, hjust=1))
-  #png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
+  png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
   print(rawsgplot)
-  #dev.off()
+  dev.off()
 }
+
+gage='1KA9'
+genv <- gagesenv[gagesenv$RGS_No==gage,]
+gname <- paste(genv$RGS_Loc,"river at",genv$RGS_Name,sep=" ")
+#Generate FlowScreen time series
+gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
+#Make raw time series plot
+rawsgplot <-ggplot(gts, aes(x=Date, y=Flow+0.01)) +
+  #geom_rect(aes(xmin=as.Date('2001-10-01'), xmax=as.Date('2016-10-01'), ymin=min(gts$Flow-1), ymax=max(gts$Flow+1)), fill='#ffffbf', alpha=0.1) +
+  geom_point(color='#bf812d', size=1.5)+ 
+  geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,],aes(x=Date, y=Flow+0.01), color='#e31a1c', size=1.5) +
+  geom_point(data=rufidat_clean[rufidat_clean$ID==gage,],aes(x=Date, y=Flow+0.01), color='#045a8d', size=1.5) +
+  #geom_point(data=rufidat_clean[rufidat_clean$ID==gage & rufidat_clean$Date>'2001-10-01',], color='#045a8d', size=1.5) +
+  scale_y_log10(expand=c(0,0))+
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+  labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - ")) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
+print(rawsgplot)
+dev.off()
 
 ######################################## EXTRA ######################################################
 # ggplot(tscastsub, aes(x=Date, y=get(colnames(tscastsub)[sn])))+
