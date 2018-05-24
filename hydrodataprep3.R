@@ -6,7 +6,7 @@
 #Authors: Mathis L. Messager and Dr. Julian D. Olden
 #Contact info: messamat@uw.edu
 #Date created: 03/22/2018
-#Date last updated: 03/31/2018
+#Date last updated: 05/10/2018
 
 #Purpose: visualize, assess quality, and perform preliminary clean-up of hydrological data in the Rufiji river basin, provided by CDMSmith Zach T. Eichenwald
 
@@ -19,7 +19,7 @@ library(dplyr)
 library(compare)
 setwd("F:/Tanzania/Tanzania/results") #UPDATE
 datadir = file.path(getwd(),'rufiji_hydrodataraw') #UPDATE
-origdatadir = "F:/Tanzania/Tanzania/data"
+origdatadir = "F:/Tanzania/Tanzania/data" #UPDATE
 
 #Define output directory
 outdir=file.path(getwd(),'rufiji_hydrodatainspect')
@@ -144,7 +144,7 @@ JKdat$Agency <- 'JaphetKashaigili'
 # }
 
 #################################Clean out obviously spurious data in data from David Munkyala RBWB ###########################
-RBWBflow_clean <- RBWBflow
+RBWBflow_clean <- RBWBflow[!is.na(RBWBflow$Flow),]
 ###1KA9 KIMANI RIVER AT OLD GN: amomalous peak flood nealry at 2x10^7 cms
 dm1KA9<- RBWBflow_clean[RBWBflow_clean$ID=='1KA9',]
 ggplot(dm1KA9, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
@@ -161,7 +161,7 @@ dm1KA31<- RBWBflow_clean[RBWBflow_clean$ID=='1KA31',]
 
 ###1KA39A LITTLE RUAHA @ IWAWA: suspiciously low values in December 1964 (jump back to 10 cms on January 1st)
 dm1KA39A<- RBWBflow_clean[RBWBflow_clean$ID=='1KA39A',]
-#ggplot(dm1KA39A, aes(x=Date,y=Flow)) + geom_point()
+ggplot(dm1KA39A, aes(x=Date,y=Flow)) + geom_point()
 RBWBflow_clean <- RBWBflow_clean[!(RBWBflow_clean$ID=='1KA39A' & RBWBflow_clean$Flow<0.5),]
 
 ###1KB31 Kigogo-Ruaha @ Lugema (Mshongo): anomalously low values during peak periods
@@ -186,7 +186,7 @@ dm1K3A <- RBWBflow[RBWBflow$ID=='1K3A',]
 #ggplot(dm1K3A, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 
 #################################Clean out obviously spurious data in data from Japhet Kashaigili UDSM ###########################
-JKdat_clean <- JKdat
+JKdat_clean <- JKdat[!is.na(JKdat$Flow),]
 #1KB27 Luipa @ Mbingu: some discontinuities in record (sudden falls) + some suddenly low values near zero (1964)
 jk1KB27 <- JKdat[JKdat$ID=='1KB27',]
 #ggplot(jk1KB27[jk1KB27$Date>'1970-01-01',], aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
@@ -245,17 +245,22 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA37A' & rufidat_clean$Date
 
 ###1KA41	KIZIGO AT ILANGALI: seems like there was a shift in bed morphology post-2000. Overestimated 0-flows lead to long period of constant
 #                             positive flow. Could also be some odd interpolation? Overestimated floods at the end of 1984
+#                             During early period, seems like 0 flows are counted as 0.01. Replace with 0s.
 g1KA41<-rufidat_clean[rufidat_clean$ID=='1KA41',]
-g1KA41_delist <- remove_constant(g1KA41)
+#g1KA41_delist <- remove_constant(g1KA41)
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA41' & (rufidat_clean$Date>'2000-01-01' | rufidat_clean$Flow>500 |
-                                                                (rufidat_clean$Date %in% g1KA41_delist & rufidat_clean$Flow > 0))),]
+                                                                (rufidat_clean$Date %in% g1KA41_delist & rufidat_clean$Flow > 1))),]
+rufidat_clean[rufidat_clean$ID=='1KA41' & rufidat_clean$Flow<=0.01 & !is.na(rufidat_clean$Flow), 'Flow'] <- 0 
+ggplot(g1KA41, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 
 ###1KA42A	KIZIGO RIVER AT CHINUGULU: Many instances of long zero flow period post 1993. Not artefacts (according to conversation with RBWB) 
+g1KA42A<-rufidat_clean[rufidat_clean$ID=='1KA42A',]
+# ggplot(g1KA42A, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+rufidat_clean[rufidat_clean$ID=='1KA42A' & rufidat_clean$Flow<=0.01 & !is.na(rufidat_clean$Flow), 'Flow'] <- 0 
 
 ###1KA50B	MSWISWI AT WILIMA: according to ZTE: 'Records poor pre 1968, post 1999. Possible station moved in 1999?' consider removing pre-1968
 
-###1KA59	GREAT RUAHA AT MSEMBE FERRY: definite shift pre- and post-1987-1990 gap. Most likely different 
-#ZTE: "No RC info for prior to 1994. Suspect poor records prior to 1990 when new rating curve (and perhaps station) were established. Likely decent records post 1990."
+###1KA59	GREAT RUAHA AT MSEMBE FERRY: apparent shift pre- and post-1987-1990 gap due to water abstraction according to RBWB.
 
 ###1KA66	MLOWO AT ILONGO: anomalous period of constant values in late 2005-early 2006 + wonky 1993 data
 # It in fact seems like the entire rating curve is off. 1KA51A which is right upstream has a discharge >20 times smaller even after cleaning
@@ -313,10 +318,6 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB18B' & (rufidat_clean$Flo
 g1KB19A<-rufidat_clean[rufidat_clean$ID=='1KB19A',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow <=0.1812),] 
 
-###1KB19A	HAGAFIRO AT HAGAFIRO: spurious reccurring constant value
-g1KB19A<-rufidat_clean[rufidat_clean$ID=='1KB19A',]
-rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow <=0.1812),] 
-
 ###1KB24A SANJE AT SANJE: Very high peak at the beginning of the record. Way outside of the rating curve's range
 #(max spot measurement at 6cms, here flood at nearly 2500 cms, corresponding to 18m stage increase — implausible)
 #Some excessive peaks over 20cms during the short rains season pre-1985
@@ -336,7 +337,7 @@ rufidat_cleanall <- rbind(rufidat_clean,
                           JKdat_clean[JKdat_clean$ID %in% c('1KB27','1KB28'),])
 
 #################################Create dataset of deleted values###########################
-rufidat_deleted <- anti_join(rufidat_screenform, rufidat_clean, by=c("ID","Date"))
+rufidat_deleted <- anti_join(rufidat_screenform[!(rufidat_screenform$ID %in% c('1KA9','1KA21A','1KA31')),], rufidat_clean, by=c("ID","Date"))
 RBWBflow_deleted <- anti_join(RBWBflow, RBWBflow_clean, by=c("ID","Date"))
 JKdat_deleted <- anti_join(JKdat, JKdat_clean, by=c("ID","Date"))
 rufidat_deletedall <- rbind(rufidat_deleted, RBWBflow_deleted, JKdat_deleted)
