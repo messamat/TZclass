@@ -51,8 +51,8 @@ if (dir.exists(outdir)) {
 }
 
 rufidat_clean <- read.csv(file.path('rufiji_hydrodatainspect','rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
-rufidat_impute <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep('numeric',34)))
-colnames(rufidat_impute)[2:(ncol(rufidat_impute))] <- substr(colnames(rufidat_impute),2,10)[2:(ncol(rufidat_impute))]
+rufidat_impute <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep(c('numeric','numeric','character'),39)))
+colnames(rufidat_impute)[seq(2,ncol(rufidat_impute),3)] <- substr(colnames(rufidat_impute),2,10)[seq(2,ncol(rufidat_impute),3)]
 rufidat_gapsummary <- read.csv(file.path(datadir, 'rufidat_gapsummary.csv'))
 rufidat_post1991<-read.csv(file.path(datadir, 'gageselect_post1991comp90.csv'))
 rufidat_o15y<-read.csv(file.path(datadir, 'gageselect_o15comp90.csv'))
@@ -61,7 +61,7 @@ gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv'))
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
 rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'))
 
-predsmelt <-melt(setDT(rufidat_impute),id.vars = 'Date',value.name='Flow',variable.name='ID')
+predsmelt <-melt(setDT(as.data.frame(rufidat_impute)[,c(1,which(colnames(rufidat_impute) %like% "^1K*"))]),id.vars = 'Date',value.name='Flow',variable.name='ID')
 predsmelt <- predsmelt[,c(2,1,3)]
 predsmelt$year <- as.numeric(format(predsmelt$Date, "%Y"))
 predsmelt$month <- as.numeric(format(predsmelt$Date, "%m"))
@@ -101,29 +101,30 @@ allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", f
   HITall_formatmelt[is.nan(HITall_formatmelt$value),'value'] <- NA
   return(HITall_formatmelt)
 }
-#Calculate mag7 stats
-#magnifStatsOut <- calc_magnifSeven(dailyQClean,yearType="water",digits=3)
 
-rufidat_select1991 <- predsmelt[predsmelt$gap_per<=0.1 &  predsmelt$ycount1991>=10 & predsmelt$hyear>=1991 & predsmelt$hyear<2017,]
-HITpost1991 <- allHITcomp(as.data.frame(rufidat_select1991), gagesenv, 'ID')
-rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$hyear<2017 &  predsmelt$ycount_o15>=15,]
+rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & 
+                                   (predsmelt$ycount_o15>=15 | predsmelt$ID=='1KB32') | 
+                                   (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
+                                   (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
 HITo15y <- allHITcomp(as.data.frame(rufidat_select_o15y), gagesenv, 'ID')
 #write.csv(HITo15y, file.path(outdir, 'HITo15y.csv'),row.names=F)
+
+############################################### Compute redundancy in hydrologic metrics#############################
 
 ############################################### Box plot of metrics##############################
 HITboxplot <- function(HITdf, plotname) {
   HITallbox<- HITdf
-  HITallbox$group1 <- as.factor(substr(HITdf$indice,1,1))
-  HITallbox$group2 <- as.factor(substr(HITdf$indice,2,2))
-  HITallbox$indice_sub <- substr(HITdf$indice,3,5)
+  HITallbox$group1 <- as.factor(substr(HITdf$indice,1,1)) #Subset metric name into main category
+  HITallbox$group2 <- as.factor(substr(HITdf$indice,2,2)) #and l, h, and a
+  HITallbox$indice_sub <- substr(HITdf$indice,3,5) #and metric number
   HITallbox$indice_sub <- factor(HITallbox$indice_sub, levels = unique(HITallbox$indice_sub[order(as.numeric(as.character(HITallbox$indice_sub)))]))
   HITallbox$group1 <- factor(HITallbox$group1, levels = c('m','f','d','t','r'), 
-                             labels = c("Magnitude-m", "Frequency-f", "Duration-d",'Timing-t',"Rate of change-r"))
+                             labels = c("Magnitude-m", "Frequency-f", "Duration-d",'Timing-t',"Rate of change-r")) 
   HITallbox$group2 <- factor(HITallbox$group2, levels = c('h','a','l'), labels=c("High flow-h",'Average flow-a',"Low flow-l"))
-  lab <- ddply(HITallbox, .(indice), summarize, 
-               labels=median(value)-1.58*(quantile(value,0.75,na.rm=T)-quantile(value,0.25,na.rm=T))/sqrt(length(value)),
-               labels2=min(value))
-  HITallbox <-  merge(HITallbox,lab, by='indice')
+  # lab <- ddply(HITallbox, .(indice),
+  #              labels=median(value)-1.58*(quantile(value,0.75,na.rm=T)-quantile(value,0.25,na.rm=T))/sqrt(length(value)),
+  #              labels2=min(value))
+  #HITallbox <-  merge(HITallbox,lab, by=c('ID','indice'))
   HITallboxplot <-ggplot(HITallbox, aes(x=indice_sub, y=value, color=group1)) + 
     scale_y_log10(name='Metric value') +
     geom_boxplot() +
@@ -138,12 +139,11 @@ HITboxplot <- function(HITdf, plotname) {
   print(HITallboxplot)
   dev.off()
 }
-
-HITboxplot(HITpost1991,'HITallboxplotpost1991.png')
+#HITboxplot(HITpost1991,'HITallboxplotpost1991.png')
 HITboxplot(HITo15y, 'HITallboxploto15y.png')
 
 ########################################Format environmental data to be used in predictions##################################
-#Make subset of data
+#Make subset of data/remove uneeded columns
 colnames(rufienv)
 outcols <- c(1:5,7,8,10,46:71,94:114, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
                                                                     'WsPAPer','WsDamDen','WsGeolMaj','WsLCMaj','ReaElvMin',
@@ -154,7 +154,7 @@ rufienvsub$ReaDirMaj <- as.factor(rufienvsub$ReaDirMaj)
 #colnames(rufienvsub)
 
 #Data transformation
-#Transform catchments
+#Transform catchment variables
 str(rufienvsub)
 colnames(rufienvsub)
 factcol <- c(1,2,54,55,56,57,156,157,160)
@@ -170,7 +170,7 @@ sqrtcols <- c('CatAIAvg', 'CatBio14Av','CatBio17Av','CatBio19Av','CatElvMax', 'C
               'CatRoadDen','CatWatcha','CatMineDen','CatWatOcc','ReaPAPer','ReaElvAvg','WsBio14Av','WsBio17Av','WsBio19Av','WsElvMax',
               'WsElvAvg','WsEroAvg','WsSloAvg','WsSloStd','WsDen','WsRoadDen','WsWatcha','WsMineDen','WsWatOcc','WsWatSea')
 rufienvsub[,sqrtcols] <- data.trans(rufienvsub[,sqrtcols], method = 'power',exp=.5, plot = F)
-#Transform watersheds
+#Transform watershed variables
 #hist.plots(envsubws) #Inspect data
 
 #Then standardize to mean of 0 and unit variance
@@ -294,50 +294,53 @@ cluster_diagnostic <- function(clusterres, clusname, gowdis) {
 cluster_diagnostic(gaugecla_ward, "Ward's D", gaugegow_o15y)
 cluster_diagnostic(gaugecla_ward2, "Ward's D2", gaugegow_o15y)
 cluster_diagnostic(gaugecla_UPGMA, "UPGMA", gaugegow_o15y)
-#UPGMA leads to too much chaining, but Ward's D2 has higher cophenetic correlation (and in effect applies Ward's original algorithm)
+#UPGMA leads to too much chaining, and Ward's D has higher cophenetic correlation and reaches an elbow after 7 (rather than 8 classes for D2)
 
 #Get gauge classes
-classr6 <-cutree(gaugecla_ward2, k=6,, order_clusters_as_data = FALSE)
-classr6_df <- data.frame(ID=names(classr6), gclass=classr6) 
-outdirclass <- file.path(outdir,'classo15y_ward2_raw')
+classr7 <-cutree(gaugecla_ward, k=7, order_clusters_as_data = FALSE)
+classr7_df <- data.frame(ID=names(classr7), gclass=classr7) 
+outdirclass <- file.path(outdir,'classo15y_ward_raw')
 if (dir.exists(outdirclass )) {
   print('Directory already exists')
 } else {
   print(paste('Create new directory:',outdirclass))
   dir.create(outdirclass )
 }
-write.csv(classr6_df, file.path(outdirclass,'class_rawgow_ward2_6.csv'), row.names=F)
+write.csv(classr7_df, file.path(outdirclass,'class_rawgow_ward_7.csv'), row.names=F)
 classcol<- c('#1b9e77',"#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02")
+
+classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color
 
 ######################################################## Dendogram plot#######################################
 #Get the dend
-dend <- as.dendrogram(gaugecla_ward2)
-png(file.path(outdirclass,'6class_dendrogram.png'),width = 8, height=8,units='in',res=300)
+dend <- as.dendrogram(gaugecla_ward)
+png(file.path(outdirclass,'7class_dendrogram.png'),width = 8, height=8,units='in',res=300)
 par(mar=c(3,3,0,3)) #bottom left top right
 dend %>% set("branches_lwd", 2.5) %>% 
-  color_branches(k=6, col=classcol, groupLabels=T) %>% 
+  color_branches(k=7, col=classcol, groupLabels=T) %>% 
   #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
-  color_labels(k=6, col=classcol) %>%
+  color_labels(k=7, col=classcol) %>%
   plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID",mgp=c(1.5,0.5,0))
 dev.off()
 
-gaugecla_ward2_name <- gaugecla_ward2
-gaugecla_ward2_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward2_name$labels,], paste(RGS_Loc," at ", RGS_Name,sep=""))
-dendname <- as.dendrogram(gaugecla_ward2_name)
-png(file.path(outdirclass,'6class_dendrogram_names.png'),width = 8, height=8,units='in',res=300)
+gaugecla_ward_name <- gaugecla_ward
+gaugecla_ward_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward_name$labels,], 
+                                  paste(RGS_No,"-",RGS_Loc," River at ", RGS_Name,sep=""))
+dendname <- as.dendrogram(gaugecla_ward_name)
+png(file.path(outdirclass,'7class_dendrogram_names.png'),width = 8, height=8,units='in',res=300)
 par(mar=c(3,3,0,17)) #bottom left top right
 dendname %>% set("branches_lwd", 2.5) %>% 
-  color_branches(k=6, col=classcol, groupLabels=T) %>% 
+  color_branches(k=7, col=classcol, groupLabels=T) %>% 
   #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
-  color_labels(k=6, col=classcol) %>%
+  color_labels(k=7, col=classcol) %>%
   plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID",mgp=c(1.5,0.5,0))
 dev.off()
 
 ######################################################## Class hydrograph plots ################
-rufidat_select_classr6 <- merge(rufidat_select_o15y, classr6_df, by="ID")
-#write.csv(rufidat_select_classr6, file.path(outdir, 'class_ward_raw/rufidat_select_classr6.csv'), row.names=F)
-setDT(rufidat_select_classr6)[,yrmean:=mean(Flow),.(ID,hyear)]
-classflowstats <- setDT(rufidat_select_classr6)[,list(classmeanfull=mean(Flow, na.rm=T), classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .75,na.rm=T),
+rufidat_select_classr7 <- merge(rufidat_select_o15y, classr7_df, by="ID")
+#write.csv(rufidat_select_classr7, file.path(outdir, 'class_ward_raw/rufidat_select_classr7.csv'), row.names=F)
+setDT(rufidat_select_classr7)[,yrmean:=mean(Flow),.(ID,hyear)]
+classflowstats <- setDT(rufidat_select_classr7)[,list(classmeanfull=mean(Flow, na.rm=T), classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .75,na.rm=T),
                                                       classQ25=quantile(Flow/yrmean, .25,na.rm=T),classQ90=quantile(Flow/yrmean, .90,na.rm=T),
                                                       classQ10=quantile(Flow/yrmean, .10,na.rm=T),classmax=max(Flow/yrmean,na.rm=T),
                                                       classmin=min(Flow/yrmean,na.rm=T),classsd=sd(Flow/yrmean,na.rm=T), 
@@ -352,7 +355,7 @@ classhydro_allfull <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hd
   theme_classic() + 
   theme(legend.position=c(0.8,0.8),
         text=element_text(size=18))
-png(file.path(outdirclass,'6class_hydrographfull.png'),width = 16, height=9,units='in',res=300)
+png(file.path(outdirclass,'7class_hydrographfull.png'),width = 16, height=9,units='in',res=300)
 print(classhydro_allfull)
 dev.off()
 
@@ -388,12 +391,12 @@ classhydro_facet <-ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy)
 p1 <- ggplot_gtable(ggplot_build(classhydro_all))
 p2 <- ggplot_gtable(ggplot_build(classhydro_facet))
 lay= t(c(1,1,2,2))
-png(file.path(outdirclass,'6class_hydrograph.png'),width = 16, height=9,units='in',res=300)
+png(file.path(outdirclass,'7class_hydrograph.png'),width = 16, height=9,units='in',res=300)
 print(grid.arrange(p1,p2, ncol=2, layout_matrix = lay))
 dev.off()
 
 ######################################################## Class boxplots ################
-classHIT <- merge(HITo15y, classr6_df, by="ID")
+classHIT <- merge(HITo15y, classr7_df, by="ID")
 # classHITplot_sub <-ggplot(setDT(classHIT)[(classHIT$indice %like% "ml"),], aes(x=as.factor(gclass), y=value, color=as.factor(gclass))) + 
 #   scale_y_log10(name='Metric value') +
 #   geom_boxplot() +
@@ -424,7 +427,7 @@ classHITplot <-ggplot(classHITsel, aes(x=as.factor(gclass), y=value+0.01, color=
         strip.text = element_text(size=10),
         legend.position='none') +
   facet_wrap(~indice, scales='free',ncol=4,labeller=as_labeller(HIT_labels)) 
-png(file.path(outdirclass,'6class_boxplot.png'),width = 8.5, height=11.5,units='in',res=300)
+png(file.path(outdirclass,'7class_boxplot.png'),width = 8.5, height=11.5,units='in',res=300)
 print(classHITplot)
 dev.off()
 
@@ -460,25 +463,25 @@ pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname)
 length(pred_envar)
 
 gagesenvsel <- gagesenv_format[gagesenv_format$RGS_No %in% unique(rufidat_select_o15y$ID),]
-gagesenv_r6 <- merge(gagesenvsel,classr6_df, by.x='RGS_No', by.y='ID')
-rownames(gagesenv_r6) <- gagesenv_r6$RGS_No
-gagesenv_r6 <- gagesenv_r6[,-which(colnames(gagesenv_r6) %in% c('RGS_No','GridID'))]
-gagesenv_r6$gclass <- as.factor(gagesenv_r6$gclass)
+gagesenv_r7 <- merge(gagesenvsel,classr7_df, by.x='RGS_No', by.y='ID')
+rownames(gagesenv_r7) <- gagesenv_r7$RGS_No
+gagesenv_r7 <- gagesenv_r7[,-which(colnames(gagesenv_r7) %in% c('RGS_No','GridID'))]
+gagesenv_r7$gclass <- as.factor(gagesenv_r7$gclass)
 rownames(rufienvsub_std) <- rufienvsub_std$GridID
 rufienvsub_std <- rufienvsub_std[,-which(colnames(rufienvsub_std) %in% 'GridID')]
 
 #Single tree
-cat.r6r <- rpart(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], method='class',control=rpart.control(minsplit=4, minbucket=1, cp=0.05))
-summary(cat.r6r)
-prp(cat.r6r, col=classcol)
-rpart.plot(cat.r6r, cex=0.8, type=3, extra=1,box.palette = classcol[c(1,1,1,1,1,1,1)])
+cat.r7r <- rpart(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], method='class',control=rpart.control(minsplit=4, minbucket=1, cp=0.05))
+summary(cat.r7r)
+prp(cat.r7r, col=classcol)
+rpart.plot(cat.r7r, cex=0.8, type=3, extra=1,box.palette = classcol[c(1,1,1,1,1,1,1)])
 
 #Boosted tree
-adaboost.r6r <- boosting(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=2000,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
-varimp <- data.frame(imp=adaboost.r6r$imp[order(adaboost.r6r$imp, decreasing = TRUE)])
+adaboost.r7r <- boosting(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], boos=TRUE, mfinal=2000,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1))
+varimp <- data.frame(imp=adaboost.r7r$imp[order(adaboost.r7r$imp, decreasing = TRUE)])
 varimp$var <- rownames(varimp)
 varimp <- merge(varimp, pred_envlabel, by='var')
-png(file.path(outdirclass,'6class_predict_envar3_imp.png'),width = 6, height=4,units='in',res=300)
+png(file.path(outdirclass,'7class_predict_envar3_imp.png'),width = 6, height=4,units='in',res=300)
 print(
   ggplot(varimp[varimp$imp>0,],aes(x=reorder(label, -imp),y=imp)) + geom_bar(stat='identity') +
     theme_classic()+
@@ -488,15 +491,18 @@ print(
 )
 dev.off()
 #CV boosted tree
-adaboostcv.r6r <- boosting.cv(gclass~., data=gagesenv_r6[,c('gclass',pred_envar)], boos=TRUE, mfinal=100,  control=rpart.control(minsplit=1, minbucket=1, cp=0.1), v=23)
-adaboostcv.r6r
+adaboostcv.r7r <- boosting.cv(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], boos=TRUE, mfinal=100,  
+                              control=rpart.control(minsplit=1, minbucket=1, cp=0.1), v=23)
+adaboostcv.r7r
 
 #Predict
-rufi_r6r<- predict.boosting(adaboost.r6r, newdata=rufienvsub_std[,pred_envar], newmfinal=length(adaboost.r6r$trees))
-#rufi_r6rmaxprob <- adply(rufi_r6r$prob, 1, max)
-#qplot(rufi_r6rmaxprob$V1)
-rufi_r6r_pred <- data.frame(GridID=as.integer(rownames(rufienvsub_std)),gclass=rufi_r6r$class)
-write.dbf(rufi_r6r_pred, file.path(outdirclass, "predict_r6r_env3.dbf"))
+rufi_r7r<- predict.boosting(adaboost.r7r, newdata=rufienvsub_std[,pred_envar], newmfinal=length(adaboost.r7r$trees))
+#rufi_r7rmaxprob <- adply(rufi_r7r$prob, 1, max)
+#qplot(rufi_r7rmaxprob$V1)
+rufi_r7r_pred <- data.frame(GridID=as.integer(rownames(rufienvsub_std)),gclass=rufi_r7r$class)
+write.dbf(rufi_r7r_pred, file.path(outdirclass, "predict_r7r_env3.dbf"))
+
+
 
 
 ################################## DUMP #####################################
