@@ -33,6 +33,7 @@ library(gridExtra)
 library(ggdendro)
 library(dendextend)
 library(dendroextras)
+library(zoo)
 
 rootdir="F:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
 
@@ -80,14 +81,14 @@ predsmelt <- merge(predsmelt, rufidat_o15y, by='ID',all.x=T)
 
 ############################################### Compute hydrologic metrics##########################################
 allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", floodquantile=0.95) {
-  #Get template
+  ####Get template
   dailyQClean <- validate_data(dfhydro[dfhydro$ID==templateID,c("Date", "Flow")], yearType="water")
   #Calculate all hit stats
   HITall_template <- calc_allHIT(dailyQClean, yearType="water", stats=hstats, digits=10, pref="mean",
                                 drainArea=dfenv[dfenv$RGS_No==templateID,'WsArea'], floodThreshold = quantile(dailyQClean$discharge, floodquantile))
   colnames(HITall_template)[2] <- templateID
   HITall <- data.frame(indice=HITall_template$indice) 
-  #Compute metrics for all gages
+  ####Compute metrics for all gages
   for (gage in unique(dfhydro[,gageID])) {
     print(gage)
     try({
@@ -111,13 +112,24 @@ rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37
                                    (predsmelt$ycount_o15>=15 | predsmelt$ID=='1KB32') | 
                                    (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
                                    (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
+#Compute HITs
 HITo15y <- allHITcomp(as.data.frame(rufidat_select_o15y), gagesenv, 'ID')
 write.csv(HITo15y, file.path(outdir, 'HITo15y.csv'),row.names=F)
 
-############################################### Compute redundancy in hydrologic metrics#############################
-#TO BE DONE
+########################Inspect NA values in HITs
+#1KA41
+median(as.data.frame(rufidat_select_o15y)[rufidat_select_o15y$ID=='1KA41','Flow']) #Any metric that relies on dividing by median or some monthly flow is NA
+#dl19 is NA for many stations that have no 0-flow days
+#1KA2A
+as.data.frame(rufidat_select_o15y)[rufidat_select_o15y$ID=='1KA2A' & 
+                                     rufidat_select_o15y$Flow> 7*median(as.data.frame(rufidat_select_o15y)[rufidat_select_o15y$ID=='1KA2A','Flow']),'Flow']  #No discharge >7x median flow (mh23, mh26)
+#1KA42: any metric that relies on dividing by some monthly flow is NA
+#1KA50B
+ggplot(as.data.frame(rufidat_select_o15y)[rufidat_select_o15y$ID=='1KA50B',], aes(x=Date,y=Flow))+geom_point() #ma31 and ma32 required dividing by monthly flows, yields NA
+#1KA59:  any metric that relies on dividing by some monthly flow is NA
+#All others with mh22, mh23, mh25, and mh26 don't have flows exceeding a given factor of median flow
 
-############################################### Box plot of metrics##############################
+############################################### Box plot and table of metrics##############################
 HITboxplot <- function(HITdf, plotname) {
   HITallbox<- HITdf
   HITallbox$group1 <- as.factor(substr(HITdf$indice,1,1)) #Subset metric name into main category
@@ -147,6 +159,11 @@ HITboxplot <- function(HITdf, plotname) {
 }
 #HITboxplot(HITpost1991,'HITallboxplotpost1991.png')
 HITboxplot(HITo15y, 'HITallboxploto15y.png')
+
+# Make table reporting mean (SD) for each metric for all gauges (appendix)
+HITdf_cast <- dcast(HITo15y, ID ~ indice)
+
+
 
 ############################################### Format environmental data to be used in predictions##################################
 ####Make subset of data/remove uneeded columns
@@ -189,6 +206,52 @@ rufienvsub_std <- cbind(data.stand(rufienvsub_std, method = "standardize", margi
 gagesenv_format <- gagesenv[,c('RGS_No','GridID')]
 gagesenv_format <- merge(gagesenv_format,  rufienvsub_std, by='GridID')
 
+############################################### Compute redundancy in hydrologic metrics and subset them ################
+#Compute redundancy in metrics
+HITo15y_filled <- replace.missing(HITo15y, method='mean')
+HITdf_cast <- as.data.frame(dcast(HITo15y_filled, ID ~ indice))
+rownames(HITdf_cast) <- as.character(HITdf_cast$ID)
+HITcor <- cor(HITdf_cast[,-1],use='pairwise.complete.obs')
+HITcor[HITcor<0.9] <- NA
+write.csv(HITcor, file.path(outdir, 'HITcor.csv'), row.names=T)
+
+#Subset 1
+sub1 <- c('dh1','dh2','dh4','dh6','dh9','dh10','dh11','dh12','dh13','dl1','dl3','dl5','dl6','dl7','dl8',
+          'dl11','dl12','ma2','ma7','ma10','ma38','ma40','mh22','mh25','mh26','ml15','ml16','ml19','ml21')
+HITo15ysub1 <- droplevels(HITo15y[!(HITo15y$indice %in% sub1),]) 
+HITcorsub1 <- cor(dcast(HITo15ysub1, ID ~ indice)[,-1],use='pairwise.complete.obs')
+HITcorsub1[HITcorsub1<0.99 & HITcorsub1>-0.99] <- NA
+write.csv(HITcorsub1, file.path(outdir, 'HITcorsub.csv'), row.names=T)
+
+#Subset 2
+sub2 <- c('dh1','dh2','dh4','dh6','dh9','dh10','dh11','dh12','dh13','dl1','dl2','dl4','dl5','dl6','dl7','dl8','dl9',
+          'dl11','dl12','dl20','ma2','ma7','ma10','ma36','ma37','ma38','ma40','mh15','mh22','mh25','mh26','mh27',
+          'ml15','ml16','ml19','ml21','fh8')
+HITo15ysub2 <- droplevels(HITo15y[!(HITo15y$indice %in% sub2),]) 
+HITcorsub2 <- cor(dcast(HITo15ysub2, ID ~ indice)[,-1],use='pairwise.complete.obs')
+HITcorsub2[HITcorsub2<0.90 & HITcorsub2>-0.90] <- NA
+write.csv(HITcorsub2, file.path(outdir, 'HITcorsub.csv'), row.names=T)
+
+#subset 3
+sub3 <- c('dh1','dh2','dh3','dh4','dh5','dh6','dh8','dh9','dh10','dh11','dh12','dh13','dh20','dl1','dl2','dl3','dl4','dl5',
+          'dl6','dl7','dl8','dl9','dl10','dl11','dl12','dl13','dl14','dl20','ma2','ma7','ma10','ma11','ma36','ma37','ma38',
+          'ma40','ma42','ma45','mh13','mh14','mh15','mh17','mh22','mh25','mh26','mh27','ml13','ml15','ml16','ml19','ml21','fh8')
+length(sub3)
+HITo15ysub3 <- droplevels(HITo15y[!(HITo15y$indice %in% sub3),]) 
+
+#Ordinate metrics
+HITpca<- prcomp(HITdf_cast[,-1], scale=T)
+summary(HITpca)
+ordiplot(HITpca, choices=c(1,2), type='text', display='sites')
+arrows(0,0,HITpca$rotation[,1]*100,HITpca$rotation[,2]*100, col='grey')
+text(HITpca$rotation[,1]*100,HITpca$rotation[,2]*100, row.names(HITpca$rotation), col='red')
+text(HITpca$rotation[,1][row.names(HITpca$rotation) %in% sub3]*100,HITpca$rotation[,2][row.names(HITpca$rotation) %in% sub3]*100, row.names(HITpca$rotation)[row.names(HITpca$rotation) %in% sub3], col='orange')
+
+ordiplot(HITpca, choices=c(3,4), type='text', display='sites')
+arrows(0,0,HITpca$rotation[,3]*100,HITpca$rotation[,4]*100, col='grey')
+text(HITpca$rotation[,3]*100,HITpca$rotation[,4]*100, row.names(HITpca$rotation), col='red')
+text(HITpca$rotation[,3][row.names(HITpca$rotation) %in% sub3]*100,HITpca$rotation[,4][row.names(HITpca$rotation) %in% sub3]*100, row.names(HITpca$rotation)[row.names(HITpca$rotation) %in% sub3], col='orange')
+
 ############################################### Format hydrologic metrics to use in classification and compute Gower's distance############
 HITdist <- function(HITdf, logmetrics) { 
   if (logmetrics==TRUE){
@@ -198,17 +261,14 @@ HITdist <- function(HITdf, logmetrics) {
   HITdf_format <- merge(HITdf_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
   dimindices <- c('ma1','ma2',paste('ma',seq(12,23),sep=''),paste('ml',seq(1,12),sep=''),paste('mh',seq(1,12),sep=''), 
                   paste('dl',seq(1,5),sep=''),paste('dh',seq(1,5),sep=''),'ra1','ra3','ra6','ra7') #List of dimensional indices 
-  HITdf_format <- as.data.frame(HITdf_format[,(dimindices) := lapply(.SD, function(x) round(x/WsArea, digits=10)), .SDcols=dimindices]) #Standardize dimensional indices by drainage area
+  dimindices <- dimindices[dimindices %in% colnames(HITdf_format)] #Make sure they are all in the dataset
+  HITdf_format <- as.data.frame(setDT(HITdf_format)[,(dimindices) := lapply(.SD, function(x) round(x/WsArea, digits=10)), .SDcols=dimindices]) #Standardize dimensional indices by drainage area
   row.names(HITdf_format) <- HITdf_format$ID 
   HITdf_format <- HITdf_format[,-which(colnames(HITdf_format) %in% c('ID','WsArea'))] #Get rid of non-indices columns
   HITdf_stand <- data.stand(HITdf_format[,2:(ncol(HITdf_format))],method='standardize',margin='column',plot=F) #z-standardize columnwise 
   gauge_gow<- gowdis(HITdf_stand, w=rep(1,ncol(HITdf_stand)), asym.bin = NULL) #Compute Gower's distance so that missing values will not be taken in account
   return(gauge_gow)
 }
-
-#To do:
-#- Examine all 171 metrics (ordination, calculate VIFs), and potentially reduce.
-#- Make table reporting mean (SD) for each metric for all gauges (appendix)
 
 ######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
 ################################################ Classify based on raw indices############################################
@@ -265,6 +325,28 @@ if (dir.exists(outdirclass )) {
 }
 write.csv(classr7_df, file.path(outdirclass,'class_rawgow_ward_7.csv'), row.names=F)
 classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
+
+################################################ Classify based on subsetted indices ############################
+#Subset 1
+gaugegow_o15ysub1 <- HITdist(HITo15ysub1, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
+gaugecla_wardsub1 <-hclust(gaugegow_o15ysub1, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugecla_ward2sub1 <-hclust(gaugegow_o15ysub1, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugecla_UPGMAsub1 <-hclust(gaugegow_o15ysub1, method='average') #Classify using hierarchical agglomerative using Ward's minimum variance method
+
+cluster_diagnostic(gaugecla_wardsub1, "Ward's D sub1", gaugegow_o15ysub1)
+cluster_diagnostic(gaugecla_ward2sub1, "Ward's D2 sub1", gaugegow_o15ysub1)
+cluster_diagnostic(gaugecla_UPGMAsub1, "UPGMA sub1", gaugegow_o15ysub1)
+
+#Subset 2
+gaugegow_o15ysub2 <- HITdist(HITo15ysub2, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
+gaugecla_wardsub2 <-hclust(gaugegow_o15ysub2, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
+cluster_diagnostic(gaugecla_wardsub2, "Ward's D sub2", gaugegow_o15ysub2)
+
+#Subset 3
+gaugegow_o15ysub3 <- HITdist(HITo15ysub3, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
+gaugecla_wardsub3 <-hclust(gaugegow_o15ysub3, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
+cluster_diagnostic(gaugecla_wardsub3, "Ward's D sub3", gaugegow_o15ysub3)
+#The only difference is that 1KA11 changes group to be more spatially contiguous with headwater G. Ruaha
 
 ######################################################## Dendogram plot#######################################
 #Make good looking dendogram
@@ -425,7 +507,7 @@ pred_envarname3 <- c("area", ' average slope', 'catchment water extent', 'catchm
                      " percentage cropland", " percentage sparse vegetation", " percentage bare areas", " percentage urban areas", 
                      " percentage forest loss 2000-2016")
 
-#Set #4 (Julian's selection) - 
+#Set #4 (Julian's selection) 
 pred_envar <- c('ReaElvAvg','WsArea','WsDen','WsElvAvg','WsSloAvg','WsWatOcc','WsWatSea','WsBio10Av','WsBio11Av','WsBio12Av',
                'WsBio15Av','WsBio16Av','WsBio17Av','WsPETAvg','WsDRocAvg','WsPermAvg','WsPoroAvg','WsVegPer','WsAgriPer', 'LCSum_89','WsLakInd')
 #Get labels for variable importance plot
@@ -508,6 +590,3 @@ rufi_r7r_predsub <- rangesubset(rufi_r7r_pred_env[,c('GridID','gclass',pred_enva
                                 'gclass', 3:22)
 length(which(rufi_r7r_predsub$gclasssub>0))
 write.dbf(rufi_r7r_predsub, file.path(outdirclass, "predict_r7r_env4sub.dbf"))
-
-
-
