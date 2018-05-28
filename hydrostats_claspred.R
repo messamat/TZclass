@@ -163,49 +163,6 @@ HITboxplot(HITo15y, 'HITallboxploto15y.png')
 # Make table reporting mean (SD) for each metric for all gauges (appendix)
 HITdf_cast <- dcast(HITo15y, ID ~ indice)
 
-
-
-############################################### Format environmental data to be used in predictions##################################
-####Make subset of data/remove uneeded columns
-colnames(rufienv)
-outcols <- c(1:5,7,8,10,46:71,94:114, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
-                                                                    'WsPAPer','WsDamDen','WsGeolMaj','WsLCMaj','ReaElvMin',
-                                                                    'ReaElvMax','SUM_LENGTH_GEO','Shape_Leng') |
-                                             !is.na(str_match(colnames(rufienv),'DirSum*'))))
-rufienvsub <- rufienv[,-outcols]
-rufienvsub$ReaDirMaj <- as.factor(rufienvsub$ReaDirMaj)
-#colnames(rufienvsub)
-
-####Data transformation
-#str(rufienvsub)
-colnames(rufienvsub)
-
-factcol <- c(1,2,54,55,56,57,156,157,160) #Columns that should be considered as factor
-#Make factor colums factors
-rufienvsub[,factcol] <- sapply(rufienvsub[,factcol], as.factor) #Factorize 
-#hist.plots(rufienvsub[,-factcol]) #Inspect data
-logcols <- c('CatPopDen','ReaSloAvg','WsArea','WsPopDen') #Columns to be log-transformed
-rufienvsub[,logcols] <- data.trans(data.frame(rufienvsub[,logcols]), method = 'log', plot = F)
-sqrtcols <- c('CatAIAvg', 'CatBio14Av','CatBio17Av','CatBio19Av','CatElvMax', 'CatElvAvg','CatSloAvg','CatSloStd','CatLen_1','CatPAPer',
-              'CatRoadDen','CatWatcha','CatMineDen','CatWatOcc','ReaPAPer','ReaElvAvg','WsBio14Av','WsBio17Av','WsBio19Av','WsElvMax',
-              'WsElvAvg','WsEroAvg','WsSloAvg','WsSloStd','WsDen','WsRoadDen','WsWatcha','WsMineDen','WsWatOcc','WsWatSea') #Columns to be sqrt transform
-rufienvsub[,sqrtcols][rufienvsub[,sqrtcols]<0] <- 0 #A few precipitation values are negative, correct back to 0
-rufienvsub[,sqrtcols] <- data.trans(rufienvsub[,sqrtcols], method = 'power',exp=.5, plot = F)
-
-#Do not transform proportional data
-# logitcols <- c('CatFLosSum_1', paste('LCSum',c(1,2,3,4,5,6,7,8,10,12,23,34,45,56,67,78,89,'10_11'),sep='_'),'CatWatExt','CatResInd','CatLakInd','WsFLosSum_1',
-#               'WsWatExt','WsResInd','WsLakInd', 'WsVegPer', 'WsAgriPer') #Columns to be logit transformed
-# rufienvsub[,logitcols] <- data.trans(rufienvsub[,logitcols], method = 'logit', plot = F)
-
-
-###Standardization to mean of 0 and unit variance by variable
-rufienvsub_std <- rufienvsub[,-factcol]
-rufienvsub_std <- cbind(data.stand(rufienvsub_std, method = "standardize", margin = "column", plot = F),
-                       rufienvsub[,factcol])
-###Join standardized columns to gages
-gagesenv_format <- gagesenv[,c('RGS_No','GridID')]
-gagesenv_format <- merge(gagesenv_format,  rufienvsub_std, by='GridID')
-
 ############################################### Compute redundancy in hydrologic metrics and subset them ################
 #Compute redundancy in metrics
 HITo15y_filled <- replace.missing(HITo15y, method='mean')
@@ -271,11 +228,11 @@ HITdist <- function(HITdf, logmetrics) {
 }
 
 ######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
-################################################ Classify based on raw indices############################################
+################################################ Classify based on all indices and diagnostic ############################################
 gaugegow_o15y <- HITdist(HITo15y, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
 gaugecla_ward <-hclust(gaugegow_o15y, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 gaugecla_ward2 <-hclust(gaugegow_o15y, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
-gaugecla_UPGMA <-hclust(gaugegow_o15y, method='average') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugecla_UPGMA <-hclust(gaugegow_o15y, method='average') #Classify using  UPGMA
 
 #Classification diagnostics
 cluster_diagnostic <- function(clusterres, clusname, gowdis) {
@@ -306,7 +263,7 @@ cluster_diagnostic(gaugecla_UPGMA, "UPGMA", gaugegow_o15y)
 #UPGMA leads to too much chaining, and Ward's D has higher cophenetic correlation and reaches an elbow after 7 (rather than 8 classes for D2)
 
 #Test significance of classes
-clus.stab <- pvclust(t(HITo15y), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
+clus.stab <- pvclust(t(HITdf_cast[,-1]), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
 plot(clus.stab)
 pvrect(clus.stab, alpha=0.90)
 
@@ -326,59 +283,80 @@ if (dir.exists(outdirclass )) {
 write.csv(classr7_df, file.path(outdirclass,'class_rawgow_ward_7.csv'), row.names=F)
 classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
 
-################################################ Classify based on subsetted indices ############################
+#Make good looking dendogram
+prettydend <- function(gaugecla, outdir, imgname, colors=classcol, kclass=7) {
+  gaugecla_ward_name <- gaugecla
+  gaugecla_ward_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward_name$labels,], 
+                                    paste(RGS_No,"-",RGS_Loc," River at ", RGS_Name,sep=""))
+  dendname <- as.dendrogram(gaugecla_ward_name)
+  png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=300)
+  par(mar=c(3,3,0,17)) #bottom left top right
+  dendname %>% set("branches_lwd", 2.5) %>% 
+    color_branches(k=kclass, col=colors, groupLabels=T) %>% 
+    #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
+    color_labels(k=kclass, col=colors) %>%
+    plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID - River at Location",mgp=c(1.5,0.5,0))
+  dev.off()
+}
+prettydend(gaugecla_ward, outdir=outdirclass,imgname='7class_dendrogram.png')
+
+################################################ Classify based on subsetted indices and diagnostic ############################
 #Subset 1
 gaugegow_o15ysub1 <- HITdist(HITo15ysub1, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
 gaugecla_wardsub1 <-hclust(gaugegow_o15ysub1, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 gaugecla_ward2sub1 <-hclust(gaugegow_o15ysub1, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
-gaugecla_UPGMAsub1 <-hclust(gaugegow_o15ysub1, method='average') #Classify using hierarchical agglomerative using Ward's minimum variance method
-
+gaugecla_UPGMAsub1 <-hclust(gaugegow_o15ysub1, method='average') #Classify using UPGMA
 cluster_diagnostic(gaugecla_wardsub1, "Ward's D sub1", gaugegow_o15ysub1)
 cluster_diagnostic(gaugecla_ward2sub1, "Ward's D2 sub1", gaugegow_o15ysub1)
 cluster_diagnostic(gaugecla_UPGMAsub1, "UPGMA sub1", gaugegow_o15ysub1)
 
 #Subset 2
-gaugegow_o15ysub2 <- HITdist(HITo15ysub2, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
-gaugecla_wardsub2 <-hclust(gaugegow_o15ysub2, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugegow_o15ysub2 <- HITdist(HITo15ysub2, logmetrics=TRUE) 
+gaugecla_wardsub2 <-hclust(gaugegow_o15ysub2, method='ward.D') 
 cluster_diagnostic(gaugecla_wardsub2, "Ward's D sub2", gaugegow_o15ysub2)
 
 #Subset 3
-gaugegow_o15ysub3 <- HITdist(HITo15ysub3, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
-gaugecla_wardsub3 <-hclust(gaugegow_o15ysub3, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugegow_o15ysub3 <- HITdist(HITo15ysub3, logmetrics=TRUE) 
+gaugecla_wardsub3 <-hclust(gaugegow_o15ysub3, method='ward.D') 
+gaugecla_ward2sub3 <-hclust(gaugegow_o15ysub3, method='ward.D2')
+gaugecla_UPGMAsub3 <-hclust(gaugegow_o15ysub3, method='average')
 cluster_diagnostic(gaugecla_wardsub3, "Ward's D sub3", gaugegow_o15ysub3)
-#The only difference is that 1KA11 changes group to be more spatially contiguous with headwater G. Ruaha
+cluster_diagnostic(gaugecla_ward2sub3, "Ward's D2 sub3", gaugegow_o15ysub3)
+cluster_diagnostic(gaugecla_UPGMAsub3, "UPGMA sub3", gaugegow_o15ysub3)
+#The only class difference is that 1KA11 changes group to be more spatially contiguous with headwater G. Ruaha. Between Ward's D and D2,
+#Difference in relateness of major groups.
 
-######################################################## Dendogram plot#######################################
-#Make good looking dendogram
-dend <- as.dendrogram(gaugecla_ward)
-png(file.path(outdirclass,'7class_dendrogram.png'),width = 8, height=8,units='in',res=300)
-par(mar=c(3,3,0,3)) #bottom left top right
-dend %>% set("branches_lwd", 2.5) %>% 
-  color_branches(k=7, col=classcol, groupLabels=T) %>% 
-  #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
-  color_labels(k=7, col=classcol) %>%
-  plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID",mgp=c(1.5,0.5,0))
-dev.off()
+#Test significance of classes (#Doesn't really work I think due to small sample size for several classes)
+HITo15ysub3_filled <- replace.missing(HITo15ysub3, method='mean')
+HITdfsub3_cast <- as.data.frame(dcast(HITo15ysub3_filled, ID ~ indice))
+rownames(HITdfsub3_cast) <- as.character(HITdfsub3_cast$ID)
+clus.stab <- pvclust(t(HITdfsub3_cast[,-1]), method.hclust='ward.D', method.dist='euclidean',use.cor="pairwise.complete.obs", nboot=4999)
+plot(clus.stab)
+pvrect(clus.stab, alpha=0.90)
+clus.stab <- pvclust(t(HITdfsub3_cast[,-1]), method.hclust='ward.D2', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
+plot(clus.stab)
+pvrect(clus.stab, alpha=0.90)
 
-gaugecla_ward_name <- gaugecla_ward
-gaugecla_ward_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward_name$labels,], 
-                                  paste(RGS_No,"-",RGS_Loc," River at ", RGS_Name,sep=""))
-dendname <- as.dendrogram(gaugecla_ward_name)
-png(file.path(outdirclass,'7class_dendrogram_names.png'),width = 8, height=8,units='in',res=300)
-par(mar=c(3,3,0,17)) #bottom left top right
-dendname %>% set("branches_lwd", 2.5) %>% 
-  color_branches(k=7, col=classcol, groupLabels=T) %>% 
-  #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
-  color_labels(k=7, col=classcol) %>%
-  plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID - River at Location",mgp=c(1.5,0.5,0))
-dev.off()
+#Output and make dendogram
+classr7sub3 <-cutree(gaugecla_ward2sub3, k=7, order_clusters_as_data = FALSE)
+classr7sub3_df <- data.frame(ID=names(classr7sub3), gclass=classr7sub3) 
+outdirclass <- file.path(outdir,'classo15y_ward2_rawsub3')
+if (dir.exists(outdirclass )) {
+  print('Directory already exists')
+} else {
+  print(paste('Create new directory:',outdirclass))
+  dir.create(outdirclass )
+}
+write.csv(classr7sub3_df, file.path(outdirclass,'class_rawgow_ward2_7_sub3.csv'), row.names=F)
+classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
+prettydend(gaugecla_ward2sub3, outdir=outdirclass,imgname='7class_dendrogram.png')
 
 ######################################################## Class hydrograph plots ################
-rufidat_select_classr7 <- merge(rufidat_select_o15y, classr7_df, by="ID")
-write.csv(rufidat_select_classr7, file.path(outdir, 'classo15y_ward_raw/rufidat_select_classr7.csv'), row.names=F)
-setDT(rufidat_select_classr7)[,yrmean:=mean(Flow),.(ID,hyear)] #Compute average daily flow for each station and year
+rufidat_select_classr7sub3 <- merge(rufidat_select_o15y, classr7sub3_df, by="ID")
+write.csv(rufidat_select_classr7sub3, file.path(outdir, 'classo15y_ward_raw/rufidat_select_classr7sub3.csv'), row.names=F)
+setDT(rufidat_select_classr7sub3)[,yrmean:=mean(Flow),.(ID,hyear)] #Compute average daily flow for each station and year
 #Compute statistics on long-term daily flow (average, min, max, Q10, Q25, Q75, Q90) across all stations and years for each class
-classflowstats <- setDT(rufidat_select_classr7)[,list(classmeanfull=mean(Flow, na.rm=T), classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .75,na.rm=T),
+classflowstats <- setDT(rufidat_select_classr7sub3)[,list(classmeanfull=mean(Flow, na.rm=T), classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .75,na.rm=T),
                                                       classQ25=quantile(Flow/yrmean, .25,na.rm=T),classQ90=quantile(Flow/yrmean, .90,na.rm=T),
                                                       classQ10=quantile(Flow/yrmean, .10,na.rm=T),classmax=max(Flow/yrmean,na.rm=T),
                                                       classmin=min(Flow/yrmean,na.rm=T),classsd=sd(Flow/yrmean,na.rm=T), 
@@ -435,7 +413,7 @@ print(grid.arrange(p1,p2, ncol=2, layout_matrix = lay))
 dev.off()
 
 ######################################################## Class boxplots ################
-classHIT <- merge(HITo15y, classr7_df, by="ID")
+classHIT <- merge(HITo15y, classr7sub3_df, by="ID")
 #Plot subset of metrics by name for selection of illustrative ones
 # classHITplot_sub <-ggplot(setDT(classHIT)[(classHIT$indice %like% "ml"),], aes(x=as.factor(gclass), y=value, color=as.factor(gclass))) + 
 #   scale_y_log10(name='Metric value') +
@@ -483,6 +461,47 @@ write.csv(classHIT_summary, file.path(outdirclass, 'classHIT_summary.csv'), row.
 #- Kruskal Wallis statistics for each hydrologic metrics to assess importance on classification
 #- NMDS (Ward’s distance) of gauges, superimposing the dominant metrics
 
+############################################### Format environmental data to be used in predictions##################################
+####Make subset of data/remove uneeded columns
+colnames(rufienv)
+outcols <- c(1:5,7,8,10,46:71,94:114, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
+                                                                     'WsPAPer','WsDamDen','WsGeolMaj','WsLCMaj','ReaElvMin',
+                                                                     'ReaElvMax','SUM_LENGTH_GEO','Shape_Leng') |
+                                              !is.na(str_match(colnames(rufienv),'DirSum*'))))
+rufienvsub <- rufienv[,-outcols]
+rufienvsub$ReaDirMaj <- as.factor(rufienvsub$ReaDirMaj)
+#colnames(rufienvsub)
+
+####Data transformation
+#str(rufienvsub)
+colnames(rufienvsub)
+
+factcol <- c(1,2,54,55,56,57,156,157,160) #Columns that should be considered as factor
+#Make factor colums factors
+rufienvsub[,factcol] <- sapply(rufienvsub[,factcol], as.factor) #Factorize 
+#hist.plots(rufienvsub[,-factcol]) #Inspect data
+logcols <- c('CatPopDen','ReaSloAvg','WsArea','WsPopDen') #Columns to be log-transformed
+rufienvsub[,logcols] <- data.trans(data.frame(rufienvsub[,logcols]), method = 'log', plot = F)
+sqrtcols <- c('CatAIAvg', 'CatBio14Av','CatBio17Av','CatBio19Av','CatElvMax', 'CatElvAvg','CatSloAvg','CatSloStd','CatLen_1','CatPAPer',
+              'CatRoadDen','CatWatcha','CatMineDen','CatWatOcc','ReaPAPer','ReaElvAvg','WsBio14Av','WsBio17Av','WsBio19Av','WsElvMax',
+              'WsElvAvg','WsEroAvg','WsSloAvg','WsSloStd','WsDen','WsRoadDen','WsWatcha','WsMineDen','WsWatOcc','WsWatSea') #Columns to be sqrt transform
+rufienvsub[,sqrtcols][rufienvsub[,sqrtcols]<0] <- 0 #A few precipitation values are negative, correct back to 0
+rufienvsub[,sqrtcols] <- data.trans(rufienvsub[,sqrtcols], method = 'power',exp=.5, plot = F)
+
+#Do not transform proportional data
+# logitcols <- c('CatFLosSum_1', paste('LCSum',c(1,2,3,4,5,6,7,8,10,12,23,34,45,56,67,78,89,'10_11'),sep='_'),'CatWatExt','CatResInd','CatLakInd','WsFLosSum_1',
+#               'WsWatExt','WsResInd','WsLakInd', 'WsVegPer', 'WsAgriPer') #Columns to be logit transformed
+# rufienvsub[,logitcols] <- data.trans(rufienvsub[,logitcols], method = 'logit', plot = F)
+
+
+###Standardization to mean of 0 and unit variance by variable
+rufienvsub_std <- rufienvsub[,-factcol]
+rufienvsub_std <- cbind(data.stand(rufienvsub_std, method = "standardize", margin = "column", plot = F),
+                        rufienvsub[,factcol])
+###Join standardized columns to gages
+gagesenv_format <- gagesenv[,c('RGS_No','GridID')]
+gagesenv_format <- merge(gagesenv_format,  rufienvsub_std, by='GridID')
+
 ################################################ Predict based on raw-hydro metrics classification and raw environmental predictors############################
 #Set #1
 pred_envar1 <-c('WsArea','CatSloAvg','CatWatExt','CatWatOcc','CatWatSea','CatDRocAvg','CatPopDen','ReaElvAvg','ReaSloAvg','WsLakInd',
@@ -521,7 +540,7 @@ pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname) #Prepare labels
 
 #Format data for prediction
 gagesenvsel <- gagesenv_format[gagesenv_format$RGS_No %in% unique(rufidat_select_o15y$ID),] #Subset gauges environmental data
-gagesenv_r7 <- merge(gagesenvsel,classr7_df, by.x='RGS_No', by.y='ID') #Merge with class assignment df
+gagesenv_r7 <- merge(gagesenvsel,classr7sub3_df, by.x='RGS_No', by.y='ID') #Merge with class assignment df
 rownames(gagesenv_r7) <- gagesenv_r7$RGS_No
 gagesenv_r7 <- gagesenv_r7[,-which(colnames(gagesenv_r7) %in% c('RGS_No','GridID'))]  
 gagesenv_r7$gclass <- as.factor(gagesenv_r7$gclass) #Factorize gclass
@@ -529,7 +548,7 @@ rownames(rufienvsub_std) <- rufienvsub_std$GridID
 rufienvsub_std <- rufienvsub_std[,-which(colnames(rufienvsub_std) %in% 'GridID')] 
 
 #Single tree
-cat.r7r <- rpart(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], method='class',control=rpart.control(minsplit=4, minbucket=1, cp=0.05))
+cat.r7r <- rpart(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], method='class',control=rpart.control(minsplit=2, minbucket=2, cp=0.025))
 summary(cat.r7r)
 prp(cat.r7r, col=classcol)
 #rpart.plot(cat.r7r, cex=0.8, type=3, extra=1,box.palette = classcol[c(1,1,1,1,1,1,1)]) #To troubleshoot
