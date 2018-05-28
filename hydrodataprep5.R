@@ -69,16 +69,24 @@ rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses
 # sumcol <-adply(rufienv[,numcol],2,function(x) sum(x, na.rm=T))
 # incol <- colnames(rufienv)[!(colnames(rufienv) %in% sumcol[sumcol$V1==0,'X1'])]
 # rufienv <- rufienv[,incol] #Take out all 0 columns
+# rufienv[,'WsVegPer'] <-  with(rufienv, LCSum_12+LCSum_23+LCSum_34) #Sum % trees, scrubs, grassland into a vegetation variable
+# rufienv[,'WsAgriPer'] <-  with(rufienv, LCSum_45+LCSum_78) #Sum % cropland and bare ground into an agriculture variable
+# rufienv[rufienv$WsVegPer>1,'WsVegPer']<- 1 #Some rounding must have led to insignificant exceedance of 1
+# rufienv[rufienv$WsAgriPerr>1,'WsAgriPer'] <- 1
 # write.csv(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'),row.names=F)
 rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'))
 
 #Import gages environmental data
-gagesenv <- read.csv(file.path(getwd(),'gages_netjoin.csv'))
-incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
-gagesenv <- gagesenv[,incol] #Take out all 0 columns
-write.csv(gagesenv, file.path(getwd(),'gages_netjoinclean.csv'),row.names=F)
+# gagesenv <- read.csv(file.path(getwd(),'gages_netjoin.csv'))
+# incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
+# gagesenv <- gagesenv[,incol] #Take out all 0 columns
+# gagesenv[,'WsVegPer'] <-  with(gagesenv, LCSum_12+LCSum_23+LCSum_34) #Sum % trees, scrubs, grassland into a vegetation variable
+# gagesenv[,'WsAgriPer'] <-  with(gagesenv, LCSum_45+LCSum_78) #Sum % cropland and bare ground into an agriculture variable
+# gagesenv[gagesenv$WsVegPer>1,'WsVegPer']<- 1 #Some rounding must have led to insignificant exceedance of 1
+# gagesenv[gagesenv$WsAgriPerr>1,'WsAgriPer'] <- 1
+# write.csv(gagesenv, file.path(getwd(),'gages_netjoinclean.csv'),row.names=F)
 gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv'))
-gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
+# gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
 write.csv(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180515.csv'),row.names=F)
 
 #Import and format interpolated hydrological data
