@@ -34,6 +34,7 @@ library(ggdendro)
 library(dendextend)
 library(dendroextras)
 library(zoo)
+library(stargazer)
 
 rootdir="F:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
 
@@ -159,9 +160,6 @@ HITboxplot <- function(HITdf, plotname) {
 }
 #HITboxplot(HITpost1991,'HITallboxplotpost1991.png')
 HITboxplot(HITo15y, 'HITallboxploto15y.png')
-
-# Make table reporting mean (SD) for each metric for all gauges (appendix)
-HITdf_cast <- dcast(HITo15y, ID ~ indice)
 
 ############################################### Compute redundancy in hydrologic metrics and subset them ################
 #Compute redundancy in metrics
@@ -356,9 +354,9 @@ rufidat_select_classr7sub3 <- merge(rufidat_select_o15y, classr7sub3_df, by="ID"
 write.csv(rufidat_select_classr7sub3, file.path(outdir, 'classo15y_ward_raw/rufidat_select_classr7sub3.csv'), row.names=F)
 setDT(rufidat_select_classr7sub3)[,yrmean:=mean(Flow),.(ID,hyear)] #Compute average daily flow for each station and year
 #Compute statistics on long-term daily flow (average, min, max, Q10, Q25, Q75, Q90) across all stations and years for each class
-classflowstats <- setDT(rufidat_select_classr7sub3)[,list(classmeanfull=mean(Flow, na.rm=T), classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .75,na.rm=T),
-                                                      classQ25=quantile(Flow/yrmean, .25,na.rm=T),classQ90=quantile(Flow/yrmean, .90,na.rm=T),
-                                                      classQ10=quantile(Flow/yrmean, .10,na.rm=T),classmax=max(Flow/yrmean,na.rm=T),
+classflowstats <- setDT(rufidat_select_classr7sub3)[,list(classmeanfull=mean(Flow, na.rm=T), classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .25,na.rm=T),
+                                                      classQ25=quantile(Flow/yrmean, .75,na.rm=T),classQ90=quantile(Flow/yrmean, .10,na.rm=T),
+                                                      classQ10=quantile(Flow/yrmean, .90,na.rm=T),classmax=max(Flow/yrmean,na.rm=T),
                                                       classmin=min(Flow/yrmean,na.rm=T),classsd=sd(Flow/yrmean,na.rm=T), 
                                                       cal_hdoy=format(as.Date(hdoy, origin='2015-10-01'), "%Y-%m-%d")),
                                                 .(gclass,hdoy)] 
@@ -391,7 +389,7 @@ classhydro_all <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy),
 classhydro_facet <-ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy))) + 
   #geom_ribbon(aes(ymin=ifelse(classmean-2*classsd>=0,classmean-2*classsd,0), ymax=classmean+2*classsd,
   #                fill=factor(gclass)),alpha=0.3) +
-  geom_ribbon(aes(ymin=classQ10, ymax=classQ90,
+  geom_ribbon(aes(ymin=classQ90, ymax=classQ10,
                   fill=factor(gclass)),alpha=0.3) +
   geom_line(aes(y=classmean, color=factor(gclass)),size=1.2) + 
   facet_grid(gclass~.,scale='free_y') +
@@ -405,7 +403,7 @@ classhydro_facet <-ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy)
         strip.text.y = element_blank(),
         text=element_text(size=18))
 
-p1 <- ggplot_gtable(ggplot_build(classhydro_all))
+p1 <- ggplot_gtable(ggplot_build(classhydro_allfull))
 p2 <- ggplot_gtable(ggplot_build(classhydro_facet))
 lay= t(c(1,1,2,2))
 png(file.path(outdirclass,'7class_hydrograph.png'),width = 16, height=9,units='in',res=300)
@@ -460,6 +458,32 @@ write.csv(classHIT_summary, file.path(outdirclass, 'classHIT_summary.csv'), row.
 #- Table reporting mean (SD) for each metric for all classes
 #- Kruskal Wallis statistics for each hydrologic metrics to assess importance on classification
 #- NMDS (Ward’s distance) of gauges, superimposing the dominant metrics
+
+######################################################## hydrometrics tables ######################################################
+# Make table reporting each metric for all gauges (appendix)
+HITo15y_cast <- as.data.frame(dcast(HITo15y, ID ~ indice))
+digitform <- function(df) {
+  for (i in 2:(ncol(df))) {
+    #Get the number of significant digits based on the log10 of the median of each metric, if number >=10, no sig digit
+    df[,i] <- as.character(round(df[,i],digits=ifelse(median(as.numeric(df[,i]),na.rm=T)==0,0,
+                                                             ifelse(floor(log10(abs(median(as.numeric(df[,i]), na.rm=T))))>0,
+                                                                            0,abs(floor(log10(abs(median(as.numeric(df[,i]), na.rm=T))))))))) 
+  }
+  df[is.na(df)] <- '–' 
+  n <- df[,1]
+  df <- as.data.frame(t(df[,-1]))
+  stations <- data.frame(basin=substr(n,3,3),ID=as.numeric(str_extract(as.character(substr(n,3,6)), "\\-*\\d+\\.*\\d*")))
+  colnames(df) <- with(stations, paste(basin,ID,sep="")) #Remove 1K and trailing letter
+  metrics <-data.frame(type=substr(rownames(df),1,2), num=as.numeric(substr(rownames(df),3,5))) 
+  return(df[with(metrics, order(type, num)), #Order rows by metrics number
+            with(stations, order(basin,ID))]) #Order columns first by basin then by numeric station ID
+}
+HITo15y_format <- digitform(HITo15y_cast)
+invisible(stargazer(HITo15y_format, type='html',out='HITdf_cast.doc', summary=F,rownames=T))
+
+# Make table reporting mean (SD) for each metric for all classes (appendix)
+
+mean(as.numeric(HITo15y_cast[i,-1]), na.rm=T)
 
 ############################################### Format environmental data to be used in predictions##################################
 ####Make subset of data/remove uneeded columns
@@ -526,11 +550,11 @@ pred_envarname3 <- c("area", ' average slope', 'catchment water extent', 'catchm
                      " percentage cropland", " percentage sparse vegetation", " percentage bare areas", " percentage urban areas", 
                      " percentage forest loss 2000-2016")
 
-#Set #4 (Julian's selection) 
-pred_envar <- c('ReaElvAvg','WsArea','WsDen','WsElvAvg','WsSloAvg','WsWatOcc','WsWatSea','WsBio10Av','WsBio11Av','WsBio12Av',
+#Set #4 (Julian's selection without drainage density) 
+pred_envar <- c('ReaElvAvg','WsArea','WsElvAvg','WsSloAvg','WsWatOcc','WsWatSea','WsBio10Av','WsBio11Av','WsBio12Av',
                'WsBio15Av','WsBio16Av','WsBio17Av','WsPETAvg','WsDRocAvg','WsPermAvg','WsPoroAvg','WsVegPer','WsAgriPer', 'LCSum_89','WsLakInd')
 #Get labels for variable importance plot
-pred_envarname <- c('reach elevation', "area", "drainage density","watershed average elevation","watershed average slope", 
+pred_envarname <- c('reach elevation', "area","watershed average elevation","watershed average slope", 
                      'watershed water occurrence', "watershed water seasonality"," Mean temperature of warmest quarter", 
                      "Mean temperature of coldest quarter", "Annual precipitation", " precip. seasonality"," precip. of wettest quarter",
                      " precip. of driest quarter", " potential evapotranspiration"," average depth to bedrock"," average subsoil permeability", 
@@ -545,7 +569,6 @@ rownames(gagesenv_r7) <- gagesenv_r7$RGS_No
 gagesenv_r7 <- gagesenv_r7[,-which(colnames(gagesenv_r7) %in% c('RGS_No','GridID'))]  
 gagesenv_r7$gclass <- as.factor(gagesenv_r7$gclass) #Factorize gclass
 rownames(rufienvsub_std) <- rufienvsub_std$GridID
-rufienvsub_std <- rufienvsub_std[,-which(colnames(rufienvsub_std) %in% 'GridID')] 
 
 #Single tree
 cat.r7r <- rpart(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], method='class',control=rpart.control(minsplit=2, minbucket=2, cp=0.025))
@@ -555,6 +578,7 @@ prp(cat.r7r, col=classcol)
 
 #Boosted tree
 adaboost.r7r <- boosting(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], boos=TRUE, mfinal=2000,  control=rpart.control(minsplit=2, minbucket=2, cp=0.05))
+adboostprob <- data.frame(ID=row.names(gagesenv_r7),adaboost.r7r$prob)
 varimp <- data.frame(imp=adaboost.r7r$imp[order(adaboost.r7r$imp, decreasing = TRUE)])
 varimp$var <- rownames(varimp)
 varimp <- merge(varimp, pred_envlabel, by='var')
