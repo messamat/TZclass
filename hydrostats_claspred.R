@@ -449,26 +449,26 @@ png(file.path(outdirclass,'7class_boxplot.png'),width = 8.5, height=11.5,units='
 print(classHITplot)
 dev.off()
 
-head(classHIT)
-classHIT_summary<- setDT(classHIT)[,classmean:=mean(value, na.rm=T), .(indice, gclass)] #Get mean value of hydrologic metric for each class
-classHIT_summary <- dcast(classHIT_summary, indice~gclass, value.var='classmean', fun=mean)
-write.csv(classHIT_summary, file.path(outdirclass, 'classHIT_summary.csv'), row.names=F)
-
 #To do:
 #- Table reporting mean (SD) for each metric for all classes
 #- Kruskal Wallis statistics for each hydrologic metrics to assess importance on classification
 #- NMDS (Ward’s distance) of gauges, superimposing the dominant metrics
 
-######################################################## hydrometrics tables ######################################################
-# Make table reporting each metric for all gauges (appendix)
+######################################################## Hydrometrics tables ######################################################
+#########Make table reporting each metric for all gauges (appendix)
 HITo15y_cast <- as.data.frame(dcast(HITo15y, ID ~ indice))
-digitform <- function(df) {
-  for (i in 2:(ncol(df))) {
-    #Get the number of significant digits based on the log10 of the median of each metric, if number >=10, no sig digit
+#Get the number of significant digits based on the log10 of the median of each metric, if number >=10, no sig digit
+digitform <- function(df, cols, extradigit=0) {
+  for (i in cols) {
     df[,i] <- as.character(round(df[,i],digits=ifelse(median(as.numeric(df[,i]),na.rm=T)==0,0,
                                                              ifelse(floor(log10(abs(median(as.numeric(df[,i]), na.rm=T))))>0,
-                                                                            0,abs(floor(log10(abs(median(as.numeric(df[,i]), na.rm=T))))))))) 
+                                                                            0,abs(floor(log10(abs(median(as.numeric(df[,i]), na.rm=T)))))))+extradigit)) 
   }
+  return(df)
+}
+#Format table (transpose, truncate and order col and row names)
+tableformat <- function(df) {
+  df <- digitform(df, 2:(ncol(df)))
   df[is.na(df)] <- '–' 
   n <- df[,1]
   df <- as.data.frame(t(df[,-1]))
@@ -478,10 +478,36 @@ digitform <- function(df) {
   return(df[with(metrics, order(type, num)), #Order rows by metrics number
             with(stations, order(basin,ID))]) #Order columns first by basin then by numeric station ID
 }
-HITo15y_format <- digitform(HITo15y_cast)
-invisible(stargazer(HITo15y_format, type='html',out='HITdf_cast.doc', summary=F,rownames=T))
+HITo15y_format <- tableformat(HITo15y_cast)
+#Output table to HTML format with default formatting
+stargazer(HITo15y_format, type='html',out='HITdf_cast.doc', summary=F,rownames=T)
 
-# Make table reporting mean (SD) for each metric for all classes (appendix)
+#########Make table reporting mean (SD) for each metric for all classes (appendix)
+classHIT_stats<- setDT(classHIT)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(indice, gclass)] #Get mean and SD of hydrologic metric for each class
+classHIT_stats <- classHIT_stats[!duplicated(classHIT_stats[,c('indice','gclass')]),]
+#Format digits for mean and sd
+classHIT_stats_meanform <- melt(setDT(digitform(
+  as.data.frame(dcast(classHIT_stats, gclass~indice, value.var='classmean')),
+  cols=2:(ncol(df)), extradigit=1)),id.vars='gclass',variable.name='metric', value.name='classmean')
+classHIT_stats_sdform <- melt(setDT(digitform(
+  as.data.frame(dcast(classHIT_stats, gclass~indice, value.var='classsd')),
+  cols=2:(ncol(df)), extradigit=1)),id.vars='gclass',variable.name='metric', value.name='classsd')
+classHIT_format <- merge(classHIT_stats_meanform, classHIT_stats_sdform, by=c('gclass','metric'))
+classHIT_format$tabcol <- with(classHIT_format, paste0(classmean,' (',classsd,')'))
+
+
+# tableformat <- function(df) {
+#   df[is.na(df)] <- '–' 
+#   n <- df[,1]
+#   df <- as.data.frame(t(df[,-1]))
+#   stations <- data.frame(basin=substr(n,3,3),ID=as.numeric(str_extract(as.character(substr(n,3,6)), "\\-*\\d+\\.*\\d*")))
+#   colnames(df) <- with(stations, paste(basin,ID,sep="")) #Remove 1K and trailing letter
+#   metrics <-data.frame(type=substr(rownames(df),1,2), num=as.numeric(substr(rownames(df),3,5))) 
+#   return(df[with(metrics, order(type, num)), #Order rows by metrics number
+#             with(stations, order(basin,ID))]) #Order columns first by basin then by numeric station ID
+# }
+
+stargazer(classHIT_format, type='html',out='HITgclass_cast.doc', summary=F,rownames=T)
 
 mean(as.numeric(HITo15y_cast[i,-1]), na.rm=T)
 
