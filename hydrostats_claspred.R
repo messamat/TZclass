@@ -270,11 +270,7 @@ pvrect(clus.stab, alpha=0.90)
 #TO DO:
 # - Compare classifications based on adjusted Rand Index (ARI)
 
-#Get gauge classes
-classdendo
-
-
-#Make good looking dendogram
+#Make table of gauge classes and good looking dendogram
 prettydend <- function(gaugecla, dir, imgname, colors=classcol, kclass=7) {
   classr <-cutree(gaugecla, k=kclass, order_clusters_as_data = FALSE)
   classr_df <- data.frame(ID=names(classr), gclass=classr) 
@@ -300,10 +296,12 @@ prettydend <- function(gaugecla, dir, imgname, colors=classcol, kclass=7) {
     color_labels(k=kclass, col=colors[1:kclass]) %>%
     plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID - River at Location",mgp=c(1.5,0.5,0))
   dev.off()
+  
+  return(classr_df)
 }
-prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='7class_dendrogram.png', kclass=7)
-prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='6class_dendrogram.png', kclass=6)
-prettydend(gaugecla_ward2, dir='classo15y_ward2_raw',imgname='7class_dendrogram.png', kclass=7)
+classr_ward_7df <- prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='7class_dendrogram.png', kclass=7)
+classr_ward_6df <- prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='6class_dendrogram.png', kclass=6)
+classr_ward2_7df <- prettydend(gaugecla_ward2, dir='classo15y_ward2_raw',imgname='7class_dendrogram.png', kclass=7)
 
 ################################################ Classify based on subsetted indices and diagnostic ############################
 #Subset 1
@@ -343,75 +341,76 @@ cluster_diagnostic(gaugecla_UPGMAsub3, "UPGMA sub3", gaugegow_o15ysub3)
 # pvrect(clus.stab, alpha=0.90)
 
 #Output and make dendogram
-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='7class_dendrogram.png', kclass=7)
-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='6class_dendrogram.png', kclass=6)
-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='7class_dendrogram.png', kclass=7)
-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='6class_dendrogram.png', kclass=6)
-
+classsub3_ward_7df <-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='7class_dendrogram.png', kclass=7)
+classsub3_ward_6df <-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='6class_dendrogram.png', kclass=6)
+classsub3_ward2_7df <-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='7class_dendrogram.png', kclass=7)
+classsub3_ward2_6df <-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='6class_dendrogram.png', kclass=6)
 
 ######################################################## Class hydrograph plots ################
-hydrographplots <- function()
+hydrographplots <- function(hydrodat, classtab, dir, kclass) {
+  outdirclass <- file.path(outdir,dir)
+  hydrodat_class_join <- merge(hydrodat, classtab, by="ID")
+  write.csv(hydrodat_class_join, file.path(outdirclass,'rufidat_class_join.csv'), row.names=F)
+  setDT(hydrodat_class_join)[,yrmean:=mean(Flow),.(ID,hyear)] #Compute average daily flow for each station and year
+  #Compute statistics on long-term daily flow (average, min, max, Q10, Q25, Q75, Q90) across all stations and years for each class
+  classflowstats <- setDT(hydrodat_class_join)[,list(classmeanfull=mean(Flow, na.rm=T), classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .25,na.rm=T),
+                                                     classQ25=quantile(Flow/yrmean, .75,na.rm=T),classQ90=quantile(Flow/yrmean, .10,na.rm=T),
+                                                     classQ10=quantile(Flow/yrmean, .90,na.rm=T),classmax=max(Flow/yrmean,na.rm=T),
+                                                     classmin=min(Flow/yrmean,na.rm=T),classsd=sd(Flow/yrmean,na.rm=T), 
+                                                     cal_hdoy=format(as.Date(hdoy, origin='2015-10-01'), "%Y-%m-%d")),
+                                               .(gclass,hdoy)] 
+  
+  #Superimposed non-standardized average yearly hydrograph for each class
+  classhydro_allfull <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmeanfull, color=factor(gclass))) + 
+    geom_line(size=1, alpha=0.8) + 
+    scale_color_manual(name='Hydrologic class',values=classcol[1:kclass]) +
+    scale_y_continuous(name='Daily mean discharge',expand=c(0,0),limits=c(0,NA)) + 
+    scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
+    theme_classic() + 
+    theme(legend.position=c(0.8,0.8),
+          text=element_text(size=18))
+  
+  #Superimposed standardized average yearly hydrograph for each class
+  classhydro_all <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmean, color=factor(gclass))) + 
+    geom_line(size=1, alpha=0.8) + 
+    scale_color_manual(name='Hydrologic class',values=classcol[1:kclass]) +
+    scale_fill_manual(name='Hydrologic class',values=classcol[1:kclass]) +
+    scale_y_continuous(name='Daily mean discharge/Mean daily discharge',expand=c(0,0),limits=c(0,NA)) + 
+    scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
+    theme_classic() + 
+    theme(legend.position='none',
+          text=element_text(size=18))
+  
+  #Facetted standardized average yearly hydrograph for each class + Q90-Q10 ribbon
+  classhydro_facet <-ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy))) + 
+    #geom_ribbon(aes(ymin=ifelse(classmean-2*classsd>=0,classmean-2*classsd,0), ymax=classmean+2*classsd,
+    #                fill=factor(gclass)),alpha=0.3) +
+    geom_ribbon(aes(ymin=classQ90, ymax=classQ10,
+                    fill=factor(gclass)),alpha=0.3) +
+    geom_line(aes(y=classmean, color=factor(gclass)),size=1.2) + 
+    facet_grid(gclass~.,scale='free_y') +
+    scale_color_manual(name='Hydrologic class',values=classcol[1:kclass]) +
+    scale_fill_manual(name='Hydrologic class',values=classcol[1:kclass]) +
+    scale_y_continuous(name='Daily mean discharge/Mean daily discharge',expand=c(0,0),limits=c(0,NA)) + 
+    scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
+    annotate("segment", x=as.Date('2015-10-01'), xend=as.Date('2016-09-30'), y=0, yend=0)+ 
+    theme_classic() +
+    theme(strip.background = element_blank(),
+          strip.text.y = element_blank(),
+          text=element_text(size=18))
+  
+  p1 <- ggplot_gtable(ggplot_build(classhydro_allfull))
+  p2 <- ggplot_gtable(ggplot_build(classhydro_facet))
+  lay= t(c(1,1,2,2))
+  png(file.path(outdirclass,paste0(kclass,'class_hydrograph.png')),width = 16, height=9,units='in',res=300)
+  print(grid.arrange(p1,p2, ncol=2, layout_matrix = lay))
+  dev.off()
+}
 
-
-rufidat_select_classr7sub3 <- merge(rufidat_select_o15y, classr7sub3_df, by="ID")
-write.csv(rufidat_select_classr7sub3, file.path(outdir, 'classo15y_ward_raw/rufidat_select_classr7sub3.csv'), row.names=F)
-setDT(rufidat_select_classr7sub3)[,yrmean:=mean(Flow),.(ID,hyear)] #Compute average daily flow for each station and year
-#Compute statistics on long-term daily flow (average, min, max, Q10, Q25, Q75, Q90) across all stations and years for each class
-classflowstats <- setDT(rufidat_select_classr7sub3)[,list(classmeanfull=mean(Flow, na.rm=T), classmean= mean(Flow/yrmean,na.rm=T),classQ75= quantile(Flow/yrmean, .25,na.rm=T),
-                                                      classQ25=quantile(Flow/yrmean, .75,na.rm=T),classQ90=quantile(Flow/yrmean, .10,na.rm=T),
-                                                      classQ10=quantile(Flow/yrmean, .90,na.rm=T),classmax=max(Flow/yrmean,na.rm=T),
-                                                      classmin=min(Flow/yrmean,na.rm=T),classsd=sd(Flow/yrmean,na.rm=T), 
-                                                      cal_hdoy=format(as.Date(hdoy, origin='2015-10-01'), "%Y-%m-%d")),
-                                                .(gclass,hdoy)] 
-
-#Superimposed non-standardized average yearly hydrograph for each class
-classhydro_allfull <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmeanfull, color=factor(gclass))) + 
-  geom_line(size=1, alpha=0.8) + 
-  scale_color_manual(name='Hydrologic class',values=classcol) +
-  scale_y_continuous(name='Daily mean discharge',expand=c(0,0),limits=c(0,NA)) + 
-  scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
-  theme_classic() + 
-  theme(legend.position=c(0.8,0.8),
-        text=element_text(size=18))
-png(file.path(outdirclass,'7class_hydrographfull.png'),width = 16, height=9,units='in',res=300)
-print(classhydro_allfull)
-dev.off()
-
-#Superimposed standardized average yearly hydrograph for each class
-classhydro_all <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmean, color=factor(gclass))) + 
-  geom_line(size=1, alpha=0.8) + 
-  scale_color_manual(name='Hydrologic class',values=classcol) +
-  scale_fill_manual(name='Hydrologic class',values=classcol) +
-  scale_y_continuous(name='Daily mean discharge/Mean daily discharge',expand=c(0,0),limits=c(0,NA)) + 
-  scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
-  theme_classic() + 
-  theme(legend.position='none',
-        text=element_text(size=18))
-
-#Facetted standardized average yearly hydrograph for each class + Q90-Q10 ribbon
-classhydro_facet <-ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy))) + 
-  #geom_ribbon(aes(ymin=ifelse(classmean-2*classsd>=0,classmean-2*classsd,0), ymax=classmean+2*classsd,
-  #                fill=factor(gclass)),alpha=0.3) +
-  geom_ribbon(aes(ymin=classQ90, ymax=classQ10,
-                  fill=factor(gclass)),alpha=0.3) +
-  geom_line(aes(y=classmean, color=factor(gclass)),size=1.2) + 
-  facet_grid(gclass~.,scale='free_y') +
-  scale_color_manual(name='Hydrologic class',values=classcol) +
-  scale_fill_manual(name='Hydrologic class',values=classcol) +
-  scale_y_continuous(name='Daily mean discharge/Mean daily discharge',expand=c(0,0),limits=c(0,NA)) + 
-  scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
-  annotate("segment", x=as.Date('2015-10-01'), xend=as.Date('2016-09-30'), y=0, yend=0)+ 
-  theme_classic() +
-  theme(strip.background = element_blank(),
-        strip.text.y = element_blank(),
-        text=element_text(size=18))
-
-p1 <- ggplot_gtable(ggplot_build(classhydro_allfull))
-p2 <- ggplot_gtable(ggplot_build(classhydro_facet))
-lay= t(c(1,1,2,2))
-png(file.path(outdirclass,'7class_hydrograph.png'),width = 16, height=9,units='in',res=300)
-print(grid.arrange(p1,p2, ncol=2, layout_matrix = lay))
-dev.off()
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_7df, dir='classo15y_ward_rawsub3', kclass=7)
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_6df, dir='classo15y_ward_rawsub3', kclass=6)
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_7df, dir='classo15y_ward_raw', kclass=7)
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_6df, dir='classo15y_ward_raw', kclass=6)
 
 ######################################################## Class boxplots ################
 classHIT <- merge(HITo15y, classr7sub3_df, by="ID")
