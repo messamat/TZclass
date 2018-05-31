@@ -108,8 +108,8 @@ allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", f
   return(HITall_formatmelt)
 }
 
-#Select subset of gauges: include 1KB32 even if only 14 years of data + Kisigo stations
-rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & 
+#Select subset of gauges: include 1KB32 even if only 14 years of data + Kisigo stations but skip 1KB28 with simulated data
+rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & predsmelt$ID !='1KB28' & 
                                    (predsmelt$ycount_o15>=15 | predsmelt$ID=='1KB32') | 
                                    (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
                                    (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
@@ -173,6 +173,7 @@ write.csv(HITcor, file.path(outdir, 'HITcor.csv'), row.names=T)
 #Subset 1
 sub1 <- c('dh1','dh2','dh4','dh6','dh9','dh10','dh11','dh12','dh13','dl1','dl3','dl5','dl6','dl7','dl8',
           'dl11','dl12','ma2','ma7','ma10','ma38','ma40','mh22','mh25','mh26','ml15','ml16','ml19','ml21')
+length(sub1)
 HITo15ysub1 <- droplevels(HITo15y[!(HITo15y$indice %in% sub1),]) 
 HITcorsub1 <- cor(dcast(HITo15ysub1, ID ~ indice)[,-1],use='pairwise.complete.obs')
 HITcorsub1[HITcorsub1<0.99 & HITcorsub1>-0.99] <- NA
@@ -182,6 +183,7 @@ write.csv(HITcorsub1, file.path(outdir, 'HITcorsub.csv'), row.names=T)
 sub2 <- c('dh1','dh2','dh4','dh6','dh9','dh10','dh11','dh12','dh13','dl1','dl2','dl4','dl5','dl6','dl7','dl8','dl9',
           'dl11','dl12','dl20','ma2','ma7','ma10','ma36','ma37','ma38','ma40','mh15','mh22','mh25','mh26','mh27',
           'ml15','ml16','ml19','ml21','fh8')
+length(sub2)
 HITo15ysub2 <- droplevels(HITo15y[!(HITo15y$indice %in% sub2),]) 
 HITcorsub2 <- cor(dcast(HITo15ysub2, ID ~ indice)[,-1],use='pairwise.complete.obs')
 HITcorsub2[HITcorsub2<0.90 & HITcorsub2>-0.90] <- NA
@@ -197,12 +199,12 @@ HITo15ysub3 <- droplevels(HITo15y[!(HITo15y$indice %in% sub3),])
 #Ordinate metrics
 HITpca<- prcomp(HITdf_cast[,-1], scale=T)
 summary(HITpca)
-ordiplot(HITpca, choices=c(1,2), type='text', display='sites')
+ordiplot(HITpca, choices=c(1,2), type='text', display='sites') #Ordinate on the 1st and 2nd PCs
 arrows(0,0,HITpca$rotation[,1]*100,HITpca$rotation[,2]*100, col='grey')
 text(HITpca$rotation[,1]*100,HITpca$rotation[,2]*100, row.names(HITpca$rotation), col='red')
 text(HITpca$rotation[,1][row.names(HITpca$rotation) %in% sub3]*100,HITpca$rotation[,2][row.names(HITpca$rotation) %in% sub3]*100, row.names(HITpca$rotation)[row.names(HITpca$rotation) %in% sub3], col='orange')
 
-ordiplot(HITpca, choices=c(3,4), type='text', display='sites')
+ordiplot(HITpca, choices=c(3,4), type='text', display='sites') #Ordinate on the 3rd and 4th PCs
 arrows(0,0,HITpca$rotation[,3]*100,HITpca$rotation[,4]*100, col='grey')
 text(HITpca$rotation[,3]*100,HITpca$rotation[,4]*100, row.names(HITpca$rotation), col='red')
 text(HITpca$rotation[,3][row.names(HITpca$rotation) %in% sub3]*100,HITpca$rotation[,4][row.names(HITpca$rotation) %in% sub3]*100, row.names(HITpca$rotation)[row.names(HITpca$rotation) %in% sub3], col='orange')
@@ -269,20 +271,23 @@ pvrect(clus.stab, alpha=0.90)
 # - Compare classifications based on adjusted Rand Index (ARI)
 
 #Get gauge classes
-classr7 <-cutree(gaugecla_ward, k=7, order_clusters_as_data = FALSE)
-classr7_df <- data.frame(ID=names(classr7), gclass=classr7) 
-outdirclass <- file.path(outdir,'classo15y_ward_raw')
-if (dir.exists(outdirclass )) {
-  print('Directory already exists')
-} else {
-  print(paste('Create new directory:',outdirclass))
-  dir.create(outdirclass )
-}
-write.csv(classr7_df, file.path(outdirclass,'class_rawgow_ward_7.csv'), row.names=F)
-classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
+classdendo
+
 
 #Make good looking dendogram
-prettydend <- function(gaugecla, outdir, imgname, colors=classcol, kclass=7) {
+prettydend <- function(gaugecla, dir, imgname, colors=classcol, kclass=7) {
+  classr <-cutree(gaugecla, k=kclass, order_clusters_as_data = FALSE)
+  classr_df <- data.frame(ID=names(classr), gclass=classr) 
+  outdirclass <- file.path(outdir,dir)
+  if (dir.exists(outdirclass )) {
+    print('Directory already exists')
+  } else {
+    print(paste('Create new directory:',outdirclass))
+    dir.create(outdirclass )
+  }
+  write.csv(classr_df, file.path(outdirclass,paste0(kclass,'classtab.csv')), row.names=F)
+  classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
+  
   gaugecla_ward_name <- gaugecla
   gaugecla_ward_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward_name$labels,], 
                                     paste(RGS_No,"-",RGS_Loc," River at ", RGS_Name,sep=""))
@@ -290,13 +295,15 @@ prettydend <- function(gaugecla, outdir, imgname, colors=classcol, kclass=7) {
   png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=300)
   par(mar=c(3,3,0,17)) #bottom left top right
   dendname %>% set("branches_lwd", 2.5) %>% 
-    color_branches(k=kclass, col=colors, groupLabels=T) %>% 
+    color_branches(k=kclass, col=colors[1:kclass], groupLabels=T) %>% 
     #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
-    color_labels(k=kclass, col=colors) %>%
+    color_labels(k=kclass, col=colors[1:kclass]) %>%
     plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID - River at Location",mgp=c(1.5,0.5,0))
   dev.off()
 }
-prettydend(gaugecla_ward, outdir=outdirclass,imgname='7class_dendrogram.png')
+prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='7class_dendrogram.png', kclass=7)
+prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='6class_dendrogram.png', kclass=6)
+prettydend(gaugecla_ward2, dir='classo15y_ward2_raw',imgname='7class_dendrogram.png', kclass=7)
 
 ################################################ Classify based on subsetted indices and diagnostic ############################
 #Subset 1
@@ -325,31 +332,27 @@ cluster_diagnostic(gaugecla_UPGMAsub3, "UPGMA sub3", gaugegow_o15ysub3)
 #Difference in relateness of major groups.
 
 #Test significance of classes (#Doesn't really work I think due to small sample size for several classes)
-HITo15ysub3_filled <- replace.missing(HITo15ysub3, method='mean')
-HITdfsub3_cast <- as.data.frame(dcast(HITo15ysub3_filled, ID ~ indice))
-rownames(HITdfsub3_cast) <- as.character(HITdfsub3_cast$ID)
-clus.stab <- pvclust(t(HITdfsub3_cast[,-1]), method.hclust='ward.D', method.dist='euclidean',use.cor="pairwise.complete.obs", nboot=4999)
-plot(clus.stab)
-pvrect(clus.stab, alpha=0.90)
-clus.stab <- pvclust(t(HITdfsub3_cast[,-1]), method.hclust='ward.D2', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
-plot(clus.stab)
-pvrect(clus.stab, alpha=0.90)
+# HITo15ysub3_filled <- replace.missing(HITo15ysub3, method='mean')
+# HITdfsub3_cast <- as.data.frame(dcast(HITo15ysub3_filled, ID ~ indice))
+# rownames(HITdfsub3_cast) <- as.character(HITdfsub3_cast$ID)
+# clus.stab <- pvclust(t(HITdfsub3_cast[,-1]), method.hclust='ward.D', method.dist='euclidean',use.cor="pairwise.complete.obs", nboot=4999)
+# plot(clus.stab)
+# pvrect(clus.stab, alpha=0.90)
+# clus.stab <- pvclust(t(HITdfsub3_cast[,-1]), method.hclust='ward.D2', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
+# plot(clus.stab)
+# pvrect(clus.stab, alpha=0.90)
 
 #Output and make dendogram
-classr7sub3 <-cutree(gaugecla_ward2sub3, k=7, order_clusters_as_data = FALSE)
-classr7sub3_df <- data.frame(ID=names(classr7sub3), gclass=classr7sub3) 
-outdirclass <- file.path(outdir,'classo15y_ward2_rawsub3')
-if (dir.exists(outdirclass )) {
-  print('Directory already exists')
-} else {
-  print(paste('Create new directory:',outdirclass))
-  dir.create(outdirclass )
-}
-write.csv(classr7sub3_df, file.path(outdirclass,'class_rawgow_ward2_7_sub3.csv'), row.names=F)
-classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
-prettydend(gaugecla_ward2sub3, outdir=outdirclass,imgname='7class_dendrogram.png')
+prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='7class_dendrogram.png', kclass=7)
+prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='6class_dendrogram.png', kclass=6)
+prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='7class_dendrogram.png', kclass=7)
+prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='6class_dendrogram.png', kclass=6)
+
 
 ######################################################## Class hydrograph plots ################
+hydrographplots <- function()
+
+
 rufidat_select_classr7sub3 <- merge(rufidat_select_o15y, classr7sub3_df, by="ID")
 write.csv(rufidat_select_classr7sub3, file.path(outdir, 'classo15y_ward_raw/rufidat_select_classr7sub3.csv'), row.names=F)
 setDT(rufidat_select_classr7sub3)[,yrmean:=mean(Flow),.(ID,hyear)] #Compute average daily flow for each station and year
