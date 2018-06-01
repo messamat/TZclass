@@ -33,6 +33,7 @@ library(gridExtra)
 library(ggdendro)
 library(dendextend)
 library(dendroextras)
+library(stringr)
 library(zoo)
 library(stargazer)
 
@@ -158,7 +159,6 @@ HITboxplot <- function(HITdf, plotname) {
   print(HITallboxplot)
   dev.off()
 }
-#HITboxplot(HITpost1991,'HITallboxplotpost1991.png')
 HITboxplot(HITo15y, 'HITallboxploto15y.png')
 
 ############################################### Compute redundancy in hydrologic metrics and subset them ################
@@ -412,8 +412,28 @@ hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_6df, dir
 hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_7df, dir='classo15y_ward_raw', kclass=7)
 hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_6df, dir='classo15y_ward_raw', kclass=6)
 
+######################################################## Dominant metric analysis ##############
+classHIT <- merge(HITo15y, classsub3_ward_7df, by="ID")
+
+classHIT_KW <- dcast(setDT(classHIT), ID+gclass~indice)
+#To do:
+#- Kruskal Wallis statistics for each hydrologic metrics to assess importance on classification
+#- NMDS (Ward’s distance) of gauges, superimposing the dominant metrics
+#- Compute classificatin strength
+for (ind in colnames(classHIT_KW[,3:(ncol(classHIT_KW))])) {
+  f <- paste0(ind," ~ gclass")
+  KW <-do.call("kruskal.test", list(as.formula(f), data=classHIT_KW))
+  print(paste0(f,": ",KW$p.value,"; ",KW$statistic))
+}
+
+KW$p.value
+
+#ANOSIM of classes
+
+
+
 ######################################################## Class boxplots ################
-classHIT <- merge(HITo15y, classr7sub3_df, by="ID")
+
 #Plot subset of metrics by name for selection of illustrative ones
 # classHITplot_sub <-ggplot(setDT(classHIT)[(classHIT$indice %like% "ml"),], aes(x=as.factor(gclass), y=value, color=as.factor(gclass))) + 
 #   scale_y_log10(name='Metric value') +
@@ -451,11 +471,6 @@ png(file.path(outdirclass,'7class_boxplot.png'),width = 8.5, height=11.5,units='
 print(classHITplot)
 dev.off()
 
-#To do:
-#- Table reporting mean (SD) for each metric for all classes
-#- Kruskal Wallis statistics for each hydrologic metrics to assess importance on classification
-#- NMDS (Ward’s distance) of gauges, superimposing the dominant metrics
-
 ######################################################## Hydrometrics tables ######################################################
 #########Make table reporting each metric for all gauges (appendix)
 HITo15y_cast <- as.data.frame(dcast(HITo15y, ID ~ indice))
@@ -468,8 +483,8 @@ digitform <- function(df, cols, extradigit=0) {
   }
   return(df)
 }
-#Format table (transpose, truncate and order col and row names)
-tableformat <- function(df) {
+#Format (transpose, truncate and order col and row names) and export table to HTML format with default formatting
+tableformat <- function(df,tabname) {
   df <- digitform(df, 2:(ncol(df)))
   df[is.na(df)] <- '–' 
   n <- df[,1]
@@ -477,41 +492,33 @@ tableformat <- function(df) {
   stations <- data.frame(basin=substr(n,3,3),ID=as.numeric(str_extract(as.character(substr(n,3,6)), "\\-*\\d+\\.*\\d*")))
   colnames(df) <- with(stations, paste(basin,ID,sep="")) #Remove 1K and trailing letter
   metrics <-data.frame(type=substr(rownames(df),1,2), num=as.numeric(substr(rownames(df),3,5))) 
-  return(df[with(metrics, order(type, num)), #Order rows by metrics number
-            with(stations, order(basin,ID))]) #Order columns first by basin then by numeric station ID
+  HITo15y_format <- df[with(metrics, order(type, num)), #Order rows by metrics number
+            with(stations, order(basin,ID))] #Order columns first by basin then by numeric station ID
+  stargazer(HITo15y_format, type='html',out=tabname, summary=F,rownames=T)
 }
-HITo15y_format <- tableformat(HITo15y_cast)
-#Output table to HTML format with default formatting
-stargazer(HITo15y_format, type='html',out='HITdf_cast.doc', summary=F,rownames=T)
+tableformat(HITo15y_cast, tabname='HITdf_cast.doc')
 
 #########Make table reporting mean (SD) for each metric for all classes (appendix)
-classHIT_stats<- setDT(classHIT)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(indice, gclass)] #Get mean and SD of hydrologic metric for each class
-classHIT_stats <- classHIT_stats[!duplicated(classHIT_stats[,c('indice','gclass')]),]
-#Format digits for mean and sd
-classHIT_stats_meanform <- melt(setDT(digitform(
-  as.data.frame(dcast(classHIT_stats, gclass~indice, value.var='classmean')),
-  cols=2:(ncol(df)), extradigit=1)),id.vars='gclass',variable.name='metric', value.name='classmean')
-classHIT_stats_sdform <- melt(setDT(digitform(
-  as.data.frame(dcast(classHIT_stats, gclass~indice, value.var='classsd')),
-  cols=2:(ncol(df)), extradigit=1)),id.vars='gclass',variable.name='metric', value.name='classsd')
-classHIT_format <- merge(classHIT_stats_meanform, classHIT_stats_sdform, by=c('gclass','metric'))
-classHIT_format$tabcol <- with(classHIT_format, paste0(classmean,' (',classsd,')'))
-
-
-# tableformat <- function(df) {
-#   df[is.na(df)] <- '–' 
-#   n <- df[,1]
-#   df <- as.data.frame(t(df[,-1]))
-#   stations <- data.frame(basin=substr(n,3,3),ID=as.numeric(str_extract(as.character(substr(n,3,6)), "\\-*\\d+\\.*\\d*")))
-#   colnames(df) <- with(stations, paste(basin,ID,sep="")) #Remove 1K and trailing letter
-#   metrics <-data.frame(type=substr(rownames(df),1,2), num=as.numeric(substr(rownames(df),3,5))) 
-#   return(df[with(metrics, order(type, num)), #Order rows by metrics number
-#             with(stations, order(basin,ID))]) #Order columns first by basin then by numeric station ID
-# }
-
-stargazer(classHIT_format, type='html',out='HITgclass_cast.doc', summary=F,rownames=T)
-
-mean(as.numeric(HITo15y_cast[i,-1]), na.rm=T)
+classtableformat <- function(df, tabname) {
+  classHIT_stats<- setDT(df)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(indice, gclass)] #Get mean and SD of hydrologic metric for each class
+  classHIT_stats <- classHIT_stats[!duplicated(classHIT_stats[,c('indice','gclass')]),]
+  classHIT_statsmean <- as.data.frame(dcast(classHIT_stats, gclass~indice, value.var='classmean'))
+  classHIT_statssd <- as.data.frame(dcast(classHIT_stats, gclass~indice, value.var='classsd'))
+  #Format digits for mean and sd
+  classHIT_stats_meanform <- melt(setDT(digitform(classHIT_statsmean,
+                                                  cols=2:(ncol(classHIT_statsmean)), extradigit=1)),id.vars='gclass',variable.name='Metric', value.name='classmean')
+  classHIT_stats_sdform <- melt(setDT(digitform(classHIT_statssd,
+                                                cols=2:(ncol(classHIT_statssd)), extradigit=1)),id.vars='gclass',variable.name='Metric', value.name='classsd')
+  classHIT_format <- merge(classHIT_stats_meanform, classHIT_stats_sdform, by=c('gclass','Metric'))
+  classHIT_format$tabcol <- with(classHIT_format, paste0(classmean,' (',classsd,')'))
+  
+  classHIT_format[is.na(classHIT_format$classsd),'tabcol']  <- '–'
+  table <- as.data.frame(dcast(classHIT_format, Metric~gclass, value.var='tabcol'))
+  metrics <-data.frame(type=substr(table$Metric,1,2), num=as.numeric(substr(table$Metric,3,5)))
+  table <- table[with(metrics, order(type, num)),] #Order rows by metrics number
+  stargazer(table, type='html',out=tabname, summary=F,rownames=F)
+}
+classtableformat(classHIT, tabname='HITgclass_cast.doc')
 
 ############################################### Format environmental data to be used in predictions##################################
 ####Make subset of data/remove uneeded columns
@@ -591,73 +598,86 @@ pred_envarname <- c('reach elevation', "area","watershed average elevation","wat
 pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname) #Prepare labels
 
 #Format data for prediction
-gagesenvsel <- gagesenv_format[gagesenv_format$RGS_No %in% unique(rufidat_select_o15y$ID),] #Subset gauges environmental data
-gagesenv_r7 <- merge(gagesenvsel,classr7sub3_df, by.x='RGS_No', by.y='ID') #Merge with class assignment df
-rownames(gagesenv_r7) <- gagesenv_r7$RGS_No
-gagesenv_r7 <- gagesenv_r7[,-which(colnames(gagesenv_r7) %in% c('RGS_No','GridID'))]  
-gagesenv_r7$gclass <- as.factor(gagesenv_r7$gclass) #Factorize gclass
-rownames(rufienvsub_std) <- rufienvsub_std$GridID
-
-#Single tree
-cat.r7r <- rpart(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], method='class',control=rpart.control(minsplit=2, minbucket=2, cp=0.025))
-summary(cat.r7r)
-prp(cat.r7r, col=classcol)
-#rpart.plot(cat.r7r, cex=0.8, type=3, extra=1,box.palette = classcol[c(1,1,1,1,1,1,1)]) #To troubleshoot
-
-#Boosted tree
-adaboost.r7r <- boosting(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], boos=TRUE, mfinal=2000,  control=rpart.control(minsplit=2, minbucket=2, cp=0.05))
-adboostprob <- data.frame(ID=row.names(gagesenv_r7),adaboost.r7r$prob)
-varimp <- data.frame(imp=adaboost.r7r$imp[order(adaboost.r7r$imp, decreasing = TRUE)])
-varimp$var <- rownames(varimp)
-varimp <- merge(varimp, pred_envlabel, by='var')
-png(file.path(outdirclass,'7class_predict_envar3_imp.png'),width = 6, height=4,units='in',res=300)
-print(
-  ggplot(varimp[varimp$imp>0,],aes(x=reorder(label, -imp),y=imp)) + geom_bar(stat='identity') +
-    theme_classic()+
-    theme(axis.text.x=element_text(angle=45, hjust=1, size=10)) + 
-    scale_y_continuous(name='Variable relative importance (%)', expand=c(0,0)) +
-    scale_x_discrete(name="Variable name")
-)
-dev.off()
-#CV boosted tree
-adaboostcv.r7r <- boosting.cv(gclass~., data=gagesenv_r7[,c('gclass',pred_envar)], boos=TRUE, mfinal=1000,  
-                              control=rpart.control(minsplit=2, minbucket=2, cp=0.05), v=14)
-adaboostcv.r7r
-
-#Predict and output 
-rufi_r7r<- predict.boosting(adaboost.r7r, newdata=rufienvsub_std[,pred_envar], newmfinal=length(adaboost.r7r$trees))
-#rufi_r7rmaxprob <- adply(rufi_r7r$prob, 1, max)
-#qplot(rufi_r7rmaxprob$V1)
-rufi_r7r_pred <- data.frame(GridID=as.integer(rownames(rufienvsub_std)),gclass=rufi_r7r$class)
-rufi_r7r_pred_env <- merge(rufi_r7r_pred, rufienv, by='GridID')
-
-#Identify those areas of the network where environmental variables are outside of gauges' range
-#Keep all parts of the network within a standard deviation of the minimum and maximum values of all variables
-#used in the predictions
-rangesubset <- function(subset_df, range_df, classcol, subset_cols) {
-  subset_df$gclasssub <- as.numeric(subset_df[,classcol])
-  subset_df$subvar <- NA
-  for (i in subset_cols) {
-    if (i <= ncol(subset_df)) {
-      varname <- colnames(subset_df)[i]
-      print(varname)
-      if (varname %in% colnames(range_df)) {
-        if (is.numeric(subset_df[,i]) & is.numeric(range_df[,varname])) {
-          subset_df[(subset_df[,i] <= (min(range_df[,varname], na.rm=T) - sd(range_df[,varname], na.rm=T))  | 
-                      subset_df[,i] >= (max(range_df[,varname], na.rm=T)+ sd(range_df[,varname], na.rm=T))) & 
-                      !is.na(subset_df[,i]), 'gclasssub'] <- 0
-          subset_df[(subset_df[,i] <= (min(range_df[,varname], na.rm=T) - sd(range_df[,varname], na.rm=T))  | 
-                       subset_df[,i] >= (max(range_df[,varname], na.rm=T)+ sd(range_df[,varname], na.rm=T))) & 
-                      !is.na(subset_df[,i]), 'subvar'] <- varname
-        } else {warning('Selected column is not numeric')}
-      } else {warning('Column names do not match between data frames')}
-    } else {warning('Column index out of subset_df range')}
+networkclasspredict <- function(hydrodat, classtab, genv, netenv, vars, varslabel, kclass, dir) {
+  outdirclass <- file.path(outdir,dir)
+  gagesenvsel <- genv[genv$RGS_No %in% unique(hydrodat$ID),] #Subset gauges environmental data
+  gagesenv_class_join  <- merge(gagesenvsel,classtab, by.x='RGS_No', by.y='ID') #Merge with class assignment df
+  rownames(gagesenv_class_join) <- gagesenv_class_join$RGS_No
+  gagesenv_class_join <- gagesenv_class_join[,-which(colnames(gagesenv_class_join) %in% c('RGS_No','GridID'))]  
+  gagesenv_class_join$gclass <- as.factor(gagesenv_class_join$gclass) #Factorize gclass
+  rownames(netenv) <- netenv$GridID
+  
+  #Single tree
+  cat <- rpart(gclass~., data=gagesenv_class_join[,c('gclass',vars)], method='class',control=rpart.control(minsplit=2, minbucket=2, cp=0.025))
+  summary(cat)
+  prp(cat, col=classcol[1:kclass])
+  #rpart.plot(cat, cex=0.8, type=3, extra=1,box.palette = classcol[rep(1, kclass)]) #To troubleshoot
+  
+  #Boosted tree
+  adaboost.bt <- boosting(gclass~., data=gagesenv_class_join[,c('gclass',vars)], boos=TRUE, mfinal=2000,  control=rpart.control(minsplit=2, minbucket=2, cp=0.05))
+  adboostprob <- data.frame(ID=row.names(gagesenv_class_join),adaboost.bt$prob)
+  varimp <- data.frame(imp=adaboost.bt$imp[order(adaboost.bt$imp, decreasing = TRUE)])
+  varimp$var <- rownames(varimp)
+  varimp <- merge(varimp, varslabel, by='var')
+  png(file.path(outdirclass,paste0(kclass,'class_predict_imp.png')),width = 6, height=4,units='in',res=300)
+  print(
+    ggplot(varimp[varimp$imp>0,],aes(x=reorder(label, -imp),y=imp)) + geom_bar(stat='identity') +
+      theme_classic()+
+      theme(axis.text.x=element_text(angle=45, hjust=1, size=10)) + 
+      scale_y_continuous(name='Variable relative importance (%)', expand=c(0,0)) +
+      scale_x_discrete(name="Variable name")
+  )
+  dev.off()
+  
+  #Predict and output 
+  rufi_pred <- predict.boosting(adaboost.bt, newdata=netenv[,vars], newmfinal=length(adaboost.bt$trees))
+  #rufi_maxprob <- adply(rufi_pred$prob, 1, max)
+  #qplot(rufi_maxprob$V1)
+  rufi_pred <- data.frame(GridID=as.integer(rownames(netenv)),gclass=rufi_pred$class)
+  rufi_pred_env <- merge(rufi_pred, rufienv, by='GridID')
+  
+  #Identify those areas of the network where environmental variables are outside of gauges' range
+  #Keep all parts of the network within a standard deviation of the minimum and maximum values of all variables
+  #used in the predictions
+  rangesubset <- function(subset_df, range_df, classcol, subset_cols) {
+    subset_df$gclasssub <- as.numeric(subset_df[,classcol])
+    subset_df$subvar <- NA
+    for (i in subset_cols) {
+      if (i <= ncol(subset_df)) {
+        varname <- colnames(subset_df)[i]
+        print(varname)
+        if (varname %in% colnames(range_df)) {
+          if (is.numeric(subset_df[,i]) & is.numeric(range_df[,varname])) {
+            subset_df[(subset_df[,i] <= (min(range_df[,varname], na.rm=T) - sd(range_df[,varname], na.rm=T))  | 
+                        subset_df[,i] >= (max(range_df[,varname], na.rm=T)+ sd(range_df[,varname], na.rm=T))) & 
+                        !is.na(subset_df[,i]), 'gclasssub'] <- 0
+            subset_df[(subset_df[,i] <= (min(range_df[,varname], na.rm=T) - sd(range_df[,varname], na.rm=T))  | 
+                         subset_df[,i] >= (max(range_df[,varname], na.rm=T)+ sd(range_df[,varname], na.rm=T))) & 
+                        !is.na(subset_df[,i]), 'subvar'] <- varname
+          } else {warning('Selected column is not numeric')}
+        } else {warning('Column names do not match between data frames')}
+      } else {warning('Column index out of subset_df range')}
+    }
+    return(subset_df)
   }
-  return(subset_df)
+  colnames(rufi_pred_env[,c('GridID','gclass',vars)])
+  rufi_predsub <- rangesubset(rufi_pred_env[,c('GridID','gclass',vars)], 
+                                  gagesenvrec[gagesenvrec$RGS_No %in% unique(hydrodat$ID),vars], 
+                                  'gclass', 3:22)
+  length(which(rufi_predsub$gclasssub>0))
+  write.dbf(rufi_predsub, file.path(outdirclass, paste0(kclass,"predict_sub.dbf")))
 }
-colnames(rufi_r7r_pred_env[,c('GridID','gclass',pred_envar)])
-rufi_r7r_predsub <- rangesubset(rufi_r7r_pred_env[,c('GridID','gclass',pred_envar)], 
-                                gagesenvrec[gagesenvrec$RGS_No %in% unique(rufidat_select_o15y$ID),pred_envar], 
-                                'gclass', 3:22)
-length(which(rufi_r7r_predsub$gclasssub>0))
-write.dbf(rufi_r7r_predsub, file.path(outdirclass, "predict_r7r_env4sub.dbf"))
+
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_7df, genv=gagesenv_format, netenv=rufienvsub_std, 
+                    vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_rawsub3')
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_6df, genv=gagesenv_format, netenv=rufienvsub_std, 
+                    vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_rawsub3')
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_7df, genv=gagesenv_format, netenv=rufienvsub_std, 
+                    vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_raw')
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_6df, genv=gagesenv_format, netenv=rufienvsub_std, 
+                    vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_raw')
+
+#CV boosted tree
+#adaboostcv.r7r <- boosting.cv(gclass~., data=gagesenv_class_join[,c('gclass',vars)], boos=TRUE, mfinal=1000,  
+#                              control=rpart.control(minsplit=2, minbucket=2, cp=0.05), v=14)
+#adaboostcv.r7r
