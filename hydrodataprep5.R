@@ -73,21 +73,21 @@ rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses
 # rufienv[,'WsAgriPer'] <-  with(rufienv, LCSum_45+LCSum_78) #Sum % cropland and bare ground into an agriculture variable
 # rufienv[rufienv$WsVegPer>1,'WsVegPer']<- 1 #Some rounding must have led to insignificant exceedance of 1
 # rufienv[rufienv$WsAgriPerr>1,'WsAgriPer'] <- 1
-# write.csv(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'),row.names=F)
+write.csv(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'),row.names=F)
 rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'))
 
 #Import gages environmental data
-# gagesenv <- read.csv(file.path(getwd(),'gages_netjoin.csv'))
-# incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
-# gagesenv <- gagesenv[,incol] #Take out all 0 columns
-# gagesenv[,'WsVegPer'] <-  with(gagesenv, LCSum_12+LCSum_23+LCSum_34) #Sum % trees, scrubs, grassland into a vegetation variable
-# gagesenv[,'WsAgriPer'] <-  with(gagesenv, LCSum_45+LCSum_78) #Sum % cropland and bare ground into an agriculture variable
-# gagesenv[gagesenv$WsVegPer>1,'WsVegPer']<- 1 #Some rounding must have led to insignificant exceedance of 1
-# gagesenv[gagesenv$WsAgriPerr>1,'WsAgriPer'] <- 1
-# write.csv(gagesenv, file.path(getwd(),'gages_netjoinclean.csv'),row.names=F)
+gagesenv <- read.csv(file.path(getwd(),'gages_netjoin.csv'))
+incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
+gagesenv <- gagesenv[,incol] #Take out all 0 columns
+gagesenv[,'WsVegPer'] <-  with(gagesenv, LCSum_12+LCSum_23+LCSum_34) #Sum % trees, scrubs, grassland into a vegetation variable
+gagesenv[,'WsAgriPer'] <-  with(gagesenv, LCSum_45+LCSum_78) #Sum % cropland and bare ground into an agriculture variable
+gagesenv[gagesenv$WsVegPer>1,'WsVegPer']<- 1 #Some rounding must have led to insignificant exceedance of 1
+gagesenv[gagesenv$WsAgriPerr>1,'WsAgriPer'] <- 1
+write.csv(gagesenv, file.path(getwd(),'gages_netjoinclean.csv'),row.names=F)
 gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv'))
-# gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
-write.csv(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180515.csv'),row.names=F)
+gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
+#write.csv(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180515.csv'),row.names=F)
 
 #Import and format interpolated hydrological data
 impute_preds <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep(c('numeric','numeric','character'),39)))
@@ -98,6 +98,14 @@ predsmelt <- predsmelt[,c(2,1,3)]
 predsmelt$SYM <- NA
 predsmelt$Agency <- NA
 predsmelt <- predsmelt[!is.na(predsmelt$Flow),]
+predsmelt$year <- as.numeric(format(predsmelt$Date, "%Y"))
+predsmelt$month <- as.numeric(format(predsmelt$Date, "%m"))
+predsmelt<-hyear.internal(predsmelt,hyrstart=10) #hdoy doesn't work
+#Compute hydrologic day
+predsmelt$doy <- as.numeric(format(predsmelt$Date,"%j"))
+predsmelt[,hdoy:=ifelse(month>=10,
+                        doy-as.numeric(format(as.Date(paste(year,'-10-01',sep="")),"%j")),
+                        doy+as.numeric(format(as.Date(paste(year-1,'-12-31',sep="")),"%j"))-as.numeric(format(as.Date(paste(year-1,'-10-01',sep="")),"%j")))] 
 
 #######UPDATE NEEDED, MAKE SURE THAT FACTOR COLUMNS REMAIN SO#########################
 ##########################################
@@ -136,20 +144,20 @@ rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(hye
 write.csv(rufidat_gapsummary, file.path(outdir, 'rufidat_gapsummary.csv'), row.names=F)
 
 ##################################Overall figure of record (record_overview)############
-record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
-  geom_point(size=2) +
-  geom_bar(data=rufidat_datesummary, aes(x=Date,y='1KB36',color=V1), stat='identity') +
-  geom_point(size=2) +
-  scale_x_date(breaks=as.Date(paste(c(seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
-  scale_y_discrete(name='Gauge ID') + 
-  scale_colour_distiller(name='Number of gauges',palette='Spectral',breaks=c(5,10,15,20,max(rufidat_datesummary$V1)),
-                         limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
-  theme_classic() + 
-  theme(text=element_text(size=24),
-        axis.text.x = element_text(angle = 45, hjust=1))
-png(file.path(outdir,'record_overview20180515.png'),width = 20, height=12,units='in',res=300)
-print(record_overview)
-dev.off()
+# record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
+#   geom_point(size=2) +
+#   geom_bar(data=rufidat_datesummary, aes(x=Date,y='1KB36',color=V1), stat='identity') +
+#   geom_point(size=2) +
+#   scale_x_date(breaks=as.Date(paste(c(seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
+#   scale_y_discrete(name='Gauge ID') + 
+#   scale_colour_distiller(name='Number of gauges',palette='Spectral',breaks=c(5,10,15,20,max(rufidat_datesummary$V1)),
+#                          limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
+#   theme_classic() + 
+#   theme(text=element_text(size=24),
+#         axis.text.x = element_text(angle = 45, hjust=1))
+# png(file.path(outdir,'record_overview20180515.png'),width = 20, height=12,units='in',res=300)
+# print(record_overview)
+# dev.off()
 
 rufidat_cleanenv <- merge(rufidat_clean, gagesenv, by.x='ID', by.y='RGS_No')
 rufidat_cleanenv$label <- as.factor(paste(rufidat_cleanenv$RGS_Loc,"River at", rufidat_cleanenv$RGS_Name,"-", rufidat_cleanenv$ID, sep=" "))
@@ -159,13 +167,13 @@ record_overview_name <-ggplot(data=rufidat_cleanenv, aes(x=Date, y=label)) +
   geom_bar(data=rufidat_datesummary, aes(x=Date,y='Mgugwe River at Mgugwe - 1KB36',color=V1), stat='identity') +
   geom_point(size=2) +
   scale_x_date(breaks=as.Date(paste(c(seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
-  scale_y_discrete(name='Gauge name') + 
+  scale_y_discrete(name='Gauge name - ID') + 
   scale_colour_distiller(name='Number of gauges',palette='Spectral',breaks=c(5,10,15,20,max(rufidat_datesummary$V1)),
                          limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
   theme_classic() +
   theme(text=element_text(size=20),
         axis.text.x = element_text(angle = 45, hjust=1))
-png(file.path(outdir,'record_overview20180515_names.png'),width = 20, height=12,units='in',res=300)
+png(file.path(outdir,'record_overview20180602_names.png'),width = 20, height=12,units='in',res=300)
 print(record_overview_name)
 dev.off()
 
@@ -279,6 +287,16 @@ write.csv(rufidat_o15y, file.path(outdir, 'gageselect_o15comp90.csv'), row.names
 ####
 rufidat_clean <- merge(rufidat_clean, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
 #rufidat_clean <- merge(rufidat_clean, rufidat_post1991, by='ID',all.x=T)
+
+#Final set of gauges
+#Select subset of gauges: include 1KB32 even if only 14 years of data + Kisigo stations but skip 1KB28 with simulated data
+predsmelt <- merge(predsmelt, rufidat_o15y, by='ID',all.x=T)
+predsmelt <- merge(predsmelt, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
+rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & predsmelt$ID !='1KB28' & 
+                                   (predsmelt$ycount_o15>=15 | predsmelt$ID=='1KB32') | 
+                                   (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
+                                   (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
+
 
 #######################################################################
 #Plot clean and interpolated data
@@ -413,8 +431,8 @@ theme_envnoy <- function () {
 }
 
 envplot <- function(selected_gages, plotname) {
-  gagesenvrec[gagesenvrec$RGS_No %in% selected_gages$ID,'select'] <- 'Y'
-  gagesenvrec[!(gagesenvrec$RGS_No %in% selected_gages$ID),'select'] <- 'N'
+  gagesenvrec[gagesenvrec$RGS_No %in% unique(selected_gages$ID),'select'] <- 'Y'
+  gagesenvrec[!(gagesenvrec$RGS_No %in% unique(selected_gages$ID)),'select'] <- 'N'
   
   selRGB <- rgb(168,0,0,maxColorValue = 255)
   notselRGB <- rgb(104,104,104, maxColorValue = 255)
@@ -521,8 +539,7 @@ envplot <- function(selected_gages, plotname) {
   print(plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3))
   dev.off()
 }
-envplot(gageselect1991, 'gage_env1991.png')
-envplot(gageselect_o15y, 'gage_envo15y.png')
+envplot(rufidat_select_o15y, 'gage_envo15y.png')
 
 gageselect_o15y[which(!(gageselect_o15y$ID %in% gageselect1991$ID)),]
 
