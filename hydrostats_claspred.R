@@ -36,6 +36,8 @@ library(dendroextras)
 library(stringr)
 library(zoo)
 library(stargazer)
+library(kableExtra)
+library(knitr)
 
 rootdir="F:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
 
@@ -131,7 +133,7 @@ ggplot(as.data.frame(rufidat_select_o15y)[rufidat_select_o15y$ID=='1KA50B',], ae
 #1KA59:  any metric that relies on dividing by some monthly flow is NA
 #All others with mh22, mh23, mh25, and mh26 don't have flows exceeding a given factor of median flow
 
-############################################### Box plot and table of metrics##############################
+############################################### Box plot of metrics##############################
 HITboxplot <- function(HITdf, plotname) {
   HITallbox<- HITdf
   HITallbox$group1 <- as.factor(substr(HITdf$indice,1,1)) #Subset metric name into main category
@@ -147,7 +149,7 @@ HITboxplot <- function(HITdf, plotname) {
   #HITallbox <-  merge(HITallbox,lab, by=c('ID','indice'))
   HITallboxplot <-ggplot(HITallbox, aes(x=indice_sub, y=value, color=group1)) + 
     scale_y_log10(name='Metric value') +
-    geom_boxplot() +
+    geom_boxplot(notch=F) +
     facet_grid(group2~group1, scales = "free", space="free_x") + 
     scale_x_discrete(name='Metric number (Appendix 1)')+
     theme_classic() +
@@ -193,8 +195,8 @@ write.csv(HITcorsub2, file.path(outdir, 'HITcorsub.csv'), row.names=T)
 sub3 <- c('dh1','dh2','dh3','dh4','dh5','dh6','dh8','dh9','dh10','dh11','dh12','dh13','dh20','dl1','dl2','dl3','dl4','dl5',
           'dl6','dl7','dl8','dl9','dl10','dl11','dl12','dl13','dl14','dl20','ma2','ma7','ma10','ma11','ma36','ma37','ma38',
           'ma40','ma42','ma45','mh13','mh14','mh15','mh17','mh22','mh25','mh26','mh27','ml13','ml15','ml16','ml19','ml21','fh8')
-length(sub3)
 HITo15ysub3 <- droplevels(HITo15y[!(HITo15y$indice %in% sub3),]) 
+length(unique(HITo15ysub3$indice))
 
 #Ordinate metrics
 HITpca<- prcomp(HITdf_cast[,-1], scale=T)
@@ -235,7 +237,7 @@ gaugecla_ward2 <-hclust(gaugegow_o15y, method='ward.D2') #Classify using hierarc
 gaugecla_UPGMA <-hclust(gaugegow_o15y, method='average') #Classify using  UPGMA
 
 #Classification diagnostics
-cluster_diagnostic <- function(clusterres, clusname, gowdis) {
+cluster_diagnostic <- function(clusterres, clusname, gowdis, format='pdf') {
   #hclus.table(clusterres)
   coef.hclust(clusterres) #Compute agglomerative coefficient
   #cor(gowdis, cophenetic(clusterres)) #Compute cophenetic coefficient
@@ -244,7 +246,12 @@ cluster_diagnostic <- function(clusterres, clusname, gowdis) {
   hclus.cophenetic(gowdis, clusterres) 
   dev.off()
   #Scree plot
+  if (format=='png'){
   png(file.path(outdir, paste('o15y_r6r_scree',clusname,'.png',sep="")), width=8, height=8, units='in',res=300)
+  } 
+  if (format=='pdf'){
+  pdf(file.path(outdir, paste('o15y_r6r_scree',clusname,'.pdf',sep="")), width=8, height=8)
+  }
   hclus.scree(clusterres) 
   dev.off()
   #Plot dendogram
@@ -263,14 +270,16 @@ cluster_diagnostic(gaugecla_UPGMA, "UPGMA", gaugegow_o15y)
 #UPGMA leads to too much chaining, and Ward's D has higher cophenetic correlation and reaches an elbow after 7 (rather than 8 classes for D2)
 
 #Test significance of classes
-clus.stab <- pvclust(t(HITdf_cast[,-1]), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
-plot(clus.stab)
-pvrect(clus.stab, alpha=0.90)
+#clus.stab <- pvclust(t(HITdf_cast[,-1]), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
+#plot(clus.stab)
+#pvrect(clus.stab, alpha=0.90)
 
 #TO DO:
 # - Compare classifications based on adjusted Rand Index (ARI)
 
 #Make table of gauge classes and good looking dendogram
+classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
+
 prettydend <- function(gaugecla, dir, imgname, colors=classcol, kclass=7) {
   classr <-cutree(gaugecla, k=kclass, order_clusters_as_data = FALSE)
   classr_df <- data.frame(ID=names(classr), gclass=classr) 
@@ -282,14 +291,13 @@ prettydend <- function(gaugecla, dir, imgname, colors=classcol, kclass=7) {
     dir.create(outdirclass )
   }
   write.csv(classr_df, file.path(outdirclass,paste0(kclass,'classtab.csv')), row.names=F)
-  classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
   
   gaugecla_ward_name <- gaugecla
   gaugecla_ward_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward_name$labels,], 
                                     paste(RGS_No,"-",RGS_Loc," River at ", RGS_Name,sep=""))
   dendname <- as.dendrogram(gaugecla_ward_name)
   png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=300)
-  par(mar=c(3,3,0,17)) #bottom left top right
+  par(mar=c(3,3,0,21.5)) #bottom left top right
   dendname %>% set("branches_lwd", 2.5) %>% 
     color_branches(k=kclass, col=colors[1:kclass], groupLabels=T) %>% 
     #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
@@ -319,6 +327,7 @@ gaugecla_wardsub2 <-hclust(gaugegow_o15ysub2, method='ward.D')
 cluster_diagnostic(gaugecla_wardsub2, "Ward's D sub2", gaugegow_o15ysub2)
 
 #Subset 3
+
 gaugegow_o15ysub3 <- HITdist(HITo15ysub3, logmetrics=TRUE) 
 gaugecla_wardsub3 <-hclust(gaugegow_o15ysub3, method='ward.D') 
 gaugecla_ward2sub3 <-hclust(gaugegow_o15ysub3, method='ward.D2')
@@ -364,10 +373,10 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
   classhydro_allfull <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmeanfull, color=factor(gclass))) + 
     geom_line(size=1, alpha=0.8) + 
     scale_color_manual(name='Hydrologic class',values=classcol[1:kclass]) +
-    scale_y_continuous(name='Daily mean discharge',expand=c(0,0),limits=c(0,NA)) + 
+    scale_y_continuous(name=expression('Daily mean discharge'~(m^3/s)),expand=c(0,0),limits=c(0,NA)) + 
     scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
     theme_classic() + 
-    theme(legend.position=c(0.8,0.8),
+    theme(legend.position='none',
           text=element_text(size=18))
   
   #Superimposed standardized average yearly hydrograph for each class
@@ -391,7 +400,7 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
     facet_grid(gclass~.,scale='free_y') +
     scale_color_manual(name='Hydrologic class',values=classcol[1:kclass]) +
     scale_fill_manual(name='Hydrologic class',values=classcol[1:kclass]) +
-    scale_y_continuous(name='Daily mean discharge/Mean daily discharge',expand=c(0,0),limits=c(0,NA)) + 
+    scale_y_continuous(name='Standardized daily mean discharge',expand=c(0,0),limits=c(0,NA)) + 
     scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
     annotate("segment", x=as.Date('2015-10-01'), xend=as.Date('2016-09-30'), y=0, yend=0)+ 
     theme_classic() +
@@ -412,6 +421,8 @@ hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_6df, dir
 hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_7df, dir='classo15y_ward_raw', kclass=7)
 hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_6df, dir='classo15y_ward_raw', kclass=6)
 
+
+
 ######################################################## Dominant metric analysis ##############
 classHIT <- merge(HITo15y, classsub3_ward_7df, by="ID")
 
@@ -420,56 +431,18 @@ classHIT_KW <- dcast(setDT(classHIT), ID+gclass~indice)
 #- Kruskal Wallis statistics for each hydrologic metrics to assess importance on classification
 #- NMDS (Ward’s distance) of gauges, superimposing the dominant metrics
 #- Compute classificatin strength
+metricKW <- data.frame(Metric=NA, KWchi=NA, KWp=NA)
 for (ind in colnames(classHIT_KW[,3:(ncol(classHIT_KW))])) {
   f <- paste0(ind," ~ gclass")
   KW <-do.call("kruskal.test", list(as.formula(f), data=classHIT_KW))
-  print(paste0(f,": ",KW$p.value,"; ",KW$statistic))
+  metricKW <- rbind(metricKW, data.frame(Metric=ind, KWchi=as.numeric(KW$statistic), KWp=as.numeric(KW$p.value)))
 }
-
-KW$p.value
-
-#ANOSIM of classes
-
-
-
-######################################################## Class boxplots ################
-
-#Plot subset of metrics by name for selection of illustrative ones
-# classHITplot_sub <-ggplot(setDT(classHIT)[(classHIT$indice %like% "ml"),], aes(x=as.factor(gclass), y=value, color=as.factor(gclass))) + 
-#   scale_y_log10(name='Metric value') +
-#   geom_boxplot() +
-#   scale_x_discrete(name='Metric number (Appendix 1)')+
-#   theme_classic() +
-#   facet_grid(~indice, scale='free_y') +
-#   theme(axis.title = element_text(size=9),
-#         axis.text.y = element_text(size=9),
-#         strip.text = element_text(size = 9),
-#         legend.position='none')
-# classHITplot_sub
-
-HITselplot <- c('ma41','ma8','ml14','mh16','fl1','fh1','dl12','dh18','tl1','th1','ra1','ra3') #Selection and ordering of hydrologic metrics
-HITselplotname <- c('Annual runoff', 'Q25/Q75','Min.flow/median flow','Q10/Q50',
-  'Low flood pulse count', 'High flood pulse count','Annual min. 7-day flow','# of zero flow days', 
-  'Date of annual min.','Date of annual max.','Rise rate','Fall rate') #Name for selected hydrologic metrics
-classHITsel <- classHIT[classHIT$indice %in% HITselplot,] #Subset metrics
-classHITsel$indice <- factor(classHITsel$indice, levels = HITselplot) #Order metrics
-HIT_labels<-setNames(paste(HITselplot,HITselplotname,sep=": "),HITselplot) #Set metrics labels
-
-#Boxplot of metrics for each class
-classHITplot <-ggplot(classHITsel, aes(x=as.factor(gclass), y=value+0.01, color=as.factor(gclass))) + 
-  geom_boxplot(outlier.shape = NA) +
-  scale_y_continuous(name='Metric value',expand=c(0.05,0)) +
-  scale_x_discrete(name='Hydrologic class')+
-  scale_colour_manual(values=classcol) + 
-  theme_classic() +
-  theme(axis.title = element_text(size=14),
-        axis.text.y = element_text(size=12, angle=90),
-        strip.text = element_text(size=10),
-        legend.position='none') +
-  facet_wrap(~indice, scales='free',ncol=4,labeller=as_labeller(HIT_labels)) 
-png(file.path(outdirclass,'7class_boxplot.png'),width = 8.5, height=11.5,units='in',res=300)
-print(classHITplot)
-dev.off()
+metricKW <- metricKW[!is.na(metricKW$Metric),]
+metricKW[metricKW$KWp>0.5,'Significance'] <- 'ns'
+metricKW[metricKW$KWp<=0.5,'Significance'] <- '*'
+metricKW[metricKW$KWp<=0.01,'Significance'] <- '**'
+metricKW[metricKW$KWp<=0.001,'Significance'] <- '***'
+metricKW[metricKW$KWp<=0.0001,'Significance'] <- '****'
 
 ######################################################## Hydrometrics tables ######################################################
 #########Make table reporting each metric for all gauges (appendix)
@@ -478,8 +451,8 @@ HITo15y_cast <- as.data.frame(dcast(HITo15y, ID ~ indice))
 digitform <- function(df, cols, extradigit=0) {
   for (i in cols) {
     df[,i] <- as.character(round(df[,i],digits=ifelse(median(as.numeric(df[,i]),na.rm=T)==0,0,
-                                                             ifelse(floor(log10(abs(median(as.numeric(df[,i]), na.rm=T))))>0,
-                                                                            0,abs(floor(log10(abs(median(as.numeric(df[,i]), na.rm=T)))))))+extradigit)) 
+                                                      ifelse(floor(log10(abs(median(as.numeric(df[,i]), na.rm=T))))>0,
+                                                             0,abs(floor(log10(abs(median(as.numeric(df[,i]), na.rm=T)))))))+extradigit)) 
   }
   return(df)
 }
@@ -493,13 +466,13 @@ tableformat <- function(df,tabname) {
   colnames(df) <- with(stations, paste(basin,ID,sep="")) #Remove 1K and trailing letter
   metrics <-data.frame(type=substr(rownames(df),1,2), num=as.numeric(substr(rownames(df),3,5))) 
   HITo15y_format <- df[with(metrics, order(type, num)), #Order rows by metrics number
-            with(stations, order(basin,ID))] #Order columns first by basin then by numeric station ID
+                       with(stations, order(basin,ID))] #Order columns first by basin then by numeric station ID
   stargazer(HITo15y_format, type='html',out=tabname, summary=F,rownames=T)
 }
 tableformat(HITo15y_cast, tabname='HITdf_cast.doc')
 
 #########Make table reporting mean (SD) for each metric for all classes (appendix)
-classtableformat <- function(df, tabname) {
+classtableformat <- function(df, KWtab, tabname) {
   classHIT_stats<- setDT(df)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(indice, gclass)] #Get mean and SD of hydrologic metric for each class
   classHIT_stats <- classHIT_stats[!duplicated(classHIT_stats[,c('indice','gclass')]),]
   classHIT_statsmean <- as.data.frame(dcast(classHIT_stats, gclass~indice, value.var='classmean'))
@@ -516,11 +489,65 @@ classtableformat <- function(df, tabname) {
   table <- as.data.frame(dcast(classHIT_format, Metric~gclass, value.var='tabcol'))
   metrics <-data.frame(type=substr(table$Metric,1,2), num=as.numeric(substr(table$Metric,3,5)))
   table <- table[with(metrics, order(type, num)),] #Order rows by metrics number
-  stargazer(table, type='html',out=tabname, summary=F,rownames=F)
+  table <- merge(table, metricKW[,c('Metric','Significance')], by='Metric')
+  
+  kable(table) %>%
+    kable_styling(bootstrap_options = "striped", font_size = 10) %>%
+    row_spec(which(table$Metric %in% HITo15ysub3$indice), bold=T) %>%
+    column_spec(2,color=classcol[1]) %>%
+    column_spec(3,color=classcol[2]) %>%
+    column_spec(4,color=classcol[3]) %>%
+    column_spec(5,color=classcol[4]) %>%
+    column_spec(6,color=classcol[5]) %>%
+    column_spec(7,color=classcol[6]) %>%
+    column_spec(8,color=classcol[7]) %>%
+    save_kable(tabname, self_contained=T)
 }
-classtableformat(classHIT, tabname='HITgclass_cast.doc')
+classtableformat(classHIT, KWtab=metricKW, tabname='HITgclass_cast.doc')
 
-############################################### Format environmental data to be used in predictions##################################
+###################################### Boxplots
+#ANOSIM of classes
+#Plot subset of metrics by name for selection of illustrative ones
+# classHITplot_sub <-ggplot(setDT(classHIT)[(classHIT$indice %like% "ml"),], aes(x=as.factor(gclass), y=value, color=as.factor(gclass))) + 
+#   scale_y_log10(name='Metric value') +
+#   geom_boxplot() +
+#   scale_x_discrete(name='Metric number (Appendix 1)')+
+#   theme_classic() +
+#   facet_grid(~indice, scale='free_y') +
+#   theme(axis.title = element_text(size=9),
+#         axis.text.y = element_text(size=9),
+#         strip.text = element_text(size = 9),
+#         legend.position='none')
+# classHITplot_sub
+
+HITselplot <- c('ma41','ma8','ml14','mh16','fl1','fh1','dl12','dh18','tl1','th1','ra1','ra3') #Selection and ordering of hydrologic metrics
+HITselplotname <- c('Annual runoff', 'Q25/Q75','Min.flow/median flow','Q10/Q50',
+                    'Low flood pulse count', 'High flood pulse count','Annual min. 7-day flow','# of zero flow days', 
+                    'Date of annual min.','Date of annual max.','Rise rate','Fall rate') #Name for selected hydrologic metrics
+classHITsel <- classHIT[classHIT$indice %in% HITselplot,] #Subset metrics
+classHITsel$indice <- factor(classHITsel$indice, levels = HITselplot) #Order metrics
+HIT_labels<-setNames(paste(HITselplot,HITselplotname,sep=": "),HITselplot) #Set metrics labels
+
+#Boxplot of metrics for each class
+classHITplot <-ggplot(classHITsel, aes(x=as.factor(gclass), y=value+0.01, color=as.factor(gclass))) + 
+  geom_boxplot(outlier.shape = NA) +
+  scale_y_continuous(name='Metric value',expand=c(0.05,0)) +
+  scale_x_discrete(name='Hydrologic class')+
+  scale_colour_manual(values=classcol) + 
+  theme_classic() +
+  theme(axis.title = element_text(size=14),
+        axis.text.y = element_text(size=12, angle=90),
+        strip.text = element_text(size=10),
+        legend.position='none') +
+  facet_wrap(~indice, scales='free',ncol=4,labeller=as_labeller(HIT_labels)) 
+
+dir='classo15y_ward_rawsub3'
+outdirclass <- file.path(outdir,dir)
+png(file.path(outdirclass,'7class_boxplot.png'),width = 8.5, height=11.5,units='in',res=300)
+print(classHITplot)
+dev.off()
+
+################################################ Format environmental data to be used in predictions##################################
 ####Make subset of data/remove uneeded columns
 colnames(rufienv)
 outcols <- c(1:5,7,8,10,46:71,94:114, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
@@ -589,12 +616,12 @@ pred_envarname3 <- c("area", ' average slope', 'catchment water extent', 'catchm
 pred_envar <- c('ReaElvAvg','WsArea','WsElvAvg','WsSloAvg','WsWatOcc','WsWatSea','WsBio10Av','WsBio11Av','WsBio12Av',
                'WsBio15Av','WsBio16Av','WsBio17Av','WsPETAvg','WsDRocAvg','WsPermAvg','WsPoroAvg','WsVegPer','WsAgriPer', 'LCSum_89','WsLakInd')
 #Get labels for variable importance plot
-pred_envarname <- c('reach elevation', "area","watershed average elevation","watershed average slope", 
-                     'watershed water occurrence', "watershed water seasonality"," Mean temperature of warmest quarter", 
-                     "Mean temperature of coldest quarter", "Annual precipitation", " precip. seasonality"," precip. of wettest quarter",
-                     " precip. of driest quarter", " potential evapotranspiration"," average depth to bedrock"," average subsoil permeability", 
-                     " average subsoil porosity", " percentage vegetation cover", "percentage agricultural land cover", " percentage urban cover",
-                     ' lotic index')
+pred_envarname <- c('Reach elevation', "Catchment area","Average elevation","Average slope", 
+                     'Water occurrence', "Water seasonality"," Mean temp. warmest quarter", 
+                     "Mean temp. coldest quarter", "Annual rainfall", " Rainfall seasonality"," Rainfall wettest quarter",
+                     "Rainfall driest quarter", " Potential evapotranspiration"," Average depth to bedrock"," Average subsoil permeability", 
+                     "Average subsoil porosity", "Vegetation % cover", "Agricultural % cover", "Urban % cover",
+                     'Lotic index')
 pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname) #Prepare labels
 
 #Format data for prediction
@@ -610,7 +637,9 @@ networkclasspredict <- function(hydrodat, classtab, genv, netenv, vars, varslabe
   #Single tree
   cat <- rpart(gclass~., data=gagesenv_class_join[,c('gclass',vars)], method='class',control=rpart.control(minsplit=2, minbucket=2, cp=0.025))
   summary(cat)
+  pdf(file.path(outdirclass,paste0(kclass,'class_predict_tree_example.pdf')),width = 6, height=4)
   prp(cat, col=classcol[1:kclass])
+  dev.off()
   #rpart.plot(cat, cex=0.8, type=3, extra=1,box.palette = classcol[rep(1, kclass)]) #To troubleshoot
   
   #Boosted tree
@@ -619,7 +648,7 @@ networkclasspredict <- function(hydrodat, classtab, genv, netenv, vars, varslabe
   varimp <- data.frame(imp=adaboost.bt$imp[order(adaboost.bt$imp, decreasing = TRUE)])
   varimp$var <- rownames(varimp)
   varimp <- merge(varimp, varslabel, by='var')
-  png(file.path(outdirclass,paste0(kclass,'class_predict_imp.png')),width = 6, height=4,units='in',res=300)
+  pdf(file.path(outdirclass,paste0(kclass,'class_predict_imp.pdf')),width = 6, height=4)
   print(
     ggplot(varimp[varimp$imp>0,],aes(x=reorder(label, -imp),y=imp)) + geom_bar(stat='identity') +
       theme_classic()+
