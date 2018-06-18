@@ -61,8 +61,7 @@ rufidat_clean <- read.csv(file.path('rufiji_hydrodatainspect','rufidat_clean.csv
 rufidat_impute <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep(c('numeric','numeric','character'),39))) #Cleaned + interpolated hydro data
 colnames(rufidat_impute)[seq(2,ncol(rufidat_impute),3)] <- substr(colnames(rufidat_impute),2,10)[seq(2,ncol(rufidat_impute),3)]
 rufidat_gapsummary <- read.csv(file.path(datadir, 'rufidat_gapsummary.csv')) #Assessment of data availability 
-#rufidat_post1991<-read.csv(file.path(datadir, 'gageselect_post1991comp90.csv')) #Selection of gauges that have at least 10 years  since 1991
-rufidat_o15y<-read.csv(file.path(datadir, 'gageselect_o15comp90.csv')) #Number of years with >90% data for each gauge
+rufidat_ycount<-read.csv(file.path(datadir, 'rufidat_ycount.csv')) #Number of years with >90% data for each gauge
 
 gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv')) #Import gauges' environmental data
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
@@ -80,8 +79,34 @@ predsmelt[,hdoy:=ifelse(month>=10,
                         doy-as.numeric(format(as.Date(paste(year,'-10-01',sep="")),"%j")),
                         doy+as.numeric(format(as.Date(paste(year-1,'-12-31',sep="")),"%j"))-as.numeric(format(as.Date(paste(year-1,'-10-01',sep="")),"%j")))] 
 predsmelt <- merge(predsmelt, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
-predsmelt <- merge(predsmelt, rufidat_post1991, by='ID',all.x=T)
-predsmelt <- merge(predsmelt, rufidat_o15y, by='ID',all.x=T)
+predsmelt <- merge(predsmelt, rufidat_ycount, by='ID',all.x=T)
+
+############################################### Select subset of data ##############################################
+##At least 15 years, < 10% missing data, full length of record
+##Include 1KB32 even if only 14 years of data + Kisigo stations but skip 1KB28 with simulated data
+rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & predsmelt$ID !='1KB28' & 
+                                   (predsmelt$ycount_full>=15 | predsmelt$ID=='1KB32') | 
+                                   (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
+                                   (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
+
+##At least 5 years of data, < 10% missing data, full length of record
+rufidat_select_o5y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & predsmelt$ID !='1KB28' & 
+                                   (predsmelt$ycount_full>=5) | 
+                                   (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
+                                   (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
+
+#At least 10 years of data, <10% missing data, before 1983
+rufidat_select_pre83 <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear>1958 & predsmelt$hyear<=1983 & predsmelt$ID !='1KB28' & 
+                                  (predsmelt$ycount_pre83>=10) | 
+                                  (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<1983),]
+length(unique(rufidat_select_pre83$ID))
+rufidat_select_post91 <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear>1991 & predsmelt$hyear<=2016 & predsmelt$ID !='1KB28' & 
+                                    (predsmelt$ycount_post01>=10) | 
+                                    (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear> 1991 & predsmelt$hyear<2016),]
+length(unique(rufidat_select_post91$ID))
+
+rufidat_select_pre83 <- rufidat_select_pre83[rufidat_select_pre83$ID %in% rufidat_select_post91$ID,]
+rufidat_select_post91 <- rufidat_select_post91[rufidat_select_post91$ID %in% rufidat_select_pre83$ID,]
 
 ############################################### Compute hydrologic metrics##########################################
 allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", floodquantile=0.95) {
@@ -111,16 +136,20 @@ allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", f
   return(HITall_formatmelt)
 }
 
-#Select subset of gauges: include 1KB32 even if only 14 years of data + Kisigo stations but skip 1KB28 with simulated data
-rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & predsmelt$ID !='1KB28' & 
-                                   (predsmelt$ycount_o15>=15 | predsmelt$ID=='1KB32') | 
-                                   (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
-                                   (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
-#Compute HITs
+#At least 15 years, < 10% missing data, full record
 HITo15y <- allHITcomp(as.data.frame(rufidat_select_o15y), gagesenv, 'ID')
 write.csv(HITo15y, file.path(outdir, 'HITo15y.csv'),row.names=F)
+#At least 5 years, < 10% missing data, full length of record
+HITo5y <- allHITcomp(as.data.frame(rufidat_select_o5y), gagesenv, 'ID')
+write.csv(HITo5y, file.path(outdir, 'HITo5y.csv'),row.names=F)
+#At least 10 years, < 10% missing data, 1958-1983
+HITpre83 <- allHITcomp(as.data.frame(rufidat_select_pre83), gagesenv, 'ID')
+write.csv(HITpre83, file.path(outdir, 'HITpre83.csv'),row.names=F)
+#At least 10 years, < 10% missing data, 1991-2016
+HITpost91 <- allHITcomp(as.data.frame(rufidat_select_post91), gagesenv, 'ID')
+write.csv(HITpost91, file.path(outdir, 'HITpost91.csv'),row.names=F)
 
-########################Inspect NA values in HITs
+########################Inspect NA values in HITs for > 15 years, < 10% missing data, full record ############
 #1KA41
 median(as.data.frame(rufidat_select_o15y)[rufidat_select_o15y$ID=='1KA41','Flow']) #Any metric that relies on dividing by median or some monthly flow is NA
 #dl19 is NA for many stations that have no 0-flow days
@@ -162,9 +191,9 @@ HITboxplot <- function(HITdf, plotname) {
   dev.off()
 }
 HITboxplot(HITo15y, 'HITallboxploto15y.png')
-
+HITboxplot(HITo5y, 'HITallboxploto5y.png')
 ############################################### Compute redundancy in hydrologic metrics and subset them ################
-#Compute redundancy in metrics
+#Compute redundancy in metrics for > 15 years, < 10% missing data, full record
 HITo15y_filled <- replace.missing(HITo15y, method='mean')
 HITdf_cast <- as.data.frame(dcast(HITo15y_filled, ID ~ indice))
 rownames(HITdf_cast) <- as.character(HITdf_cast$ID)
@@ -211,7 +240,13 @@ arrows(0,0,HITpca$rotation[,3]*100,HITpca$rotation[,4]*100, col='grey')
 text(HITpca$rotation[,3]*100,HITpca$rotation[,4]*100, row.names(HITpca$rotation), col='red')
 text(HITpca$rotation[,3][row.names(HITpca$rotation) %in% sub3]*100,HITpca$rotation[,4][row.names(HITpca$rotation) %in% sub3]*100, row.names(HITpca$rotation)[row.names(HITpca$rotation) %in% sub3], col='orange')
 
-############################################### Format hydrologic metrics to use in classification and compute Gower's distance############
+#Subset metrics for other datasets
+HITo5ysub3 <- droplevels(HITo5y[!(HITo5y$indice %in% sub3),]) 
+HITpre83sub3 <- droplevels(HITpre83[!(HITpre83$indice %in% sub3),]) 
+HITpost91sub3 <- droplevels(HITpost91[!(HITpost91$indice %in% sub3),]) 
+
+############################################### Classification functions ############
+#Format hydrologic metrics to use in classification and compute Gower's distance
 HITdist <- function(HITdf, logmetrics) { 
   if (logmetrics==TRUE){
     HITdf$Value <- log(HITdf$Value+1) #log-transform metric
@@ -229,33 +264,26 @@ HITdist <- function(HITdf, logmetrics) {
   return(gauge_gow)
 }
 
-######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
-################################################ Classify based on all indices and diagnostic ############################################
-gaugegow_o15y <- HITdist(HITo15y, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
-gaugecla_ward <-hclust(gaugegow_o15y, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
-gaugecla_ward2 <-hclust(gaugegow_o15y, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
-gaugecla_UPGMA <-hclust(gaugegow_o15y, method='average') #Classify using  UPGMA
-
-#Classification diagnostics
+#Get summary results and diagnostics for classification
 cluster_diagnostic <- function(clusterres, clusname, gowdis, format='pdf') {
   #hclus.table(clusterres)
   coef.hclust(clusterres) #Compute agglomerative coefficient
   #cor(gowdis, cophenetic(clusterres)) #Compute cophenetic coefficient
   #Plot cophenetic relationship 
-  png(file.path(outdir, paste('o15y_r6r_cophe',clusname,'.png',sep="")), width=8, height=8, units='in',res=300)
+  png(file.path(outdir, paste(clusname,'r6r_cophe','.png',sep="")), width=8, height=8, units='in',res=300)
   hclus.cophenetic(gowdis, clusterres) 
   dev.off()
   #Scree plot
   if (format=='png'){
-  png(file.path(outdir, paste('o15y_r6r_scree',clusname,'.png',sep="")), width=8, height=8, units='in',res=300)
+    png(file.path(outdir, paste(clusname,'r6r_scree','.png',sep="")), width=8, height=8, units='in',res=300)
   } 
   if (format=='pdf'){
-  pdf(file.path(outdir, paste('o15y_r6r_scree',clusname,'.pdf',sep="")), width=8, height=8)
+    pdf(file.path(outdir, paste(clusname,'r6r_scree','.pdf',sep="")), width=8, height=8)
   }
   hclus.scree(clusterres) 
   dev.off()
   #Plot dendogram
-  png(file.path(outdir, paste('o15y_r6r_dendogram',clusname,'.png',sep="")), width=8, height=8, units='in',res=300)
+  png(file.path(outdir, paste(clusname,'r6r_dendogram','.png',sep="")), width=8, height=8, units='in',res=300)
   plot(clusterres, main=paste(clusname, "gauge cluster dendogram",sep=" "), xlab='Gauge ID', ylab="Gower's distance", hang=-1)   
   rect.hclust(clusterres, k=4) #Draw rectangle around k classes
   rect.hclust(clusterres, k=5) 
@@ -264,23 +292,9 @@ cluster_diagnostic <- function(clusterres, clusname, gowdis, format='pdf') {
   rect.hclust(clusterres, k=8) 
   dev.off()
 }
-cluster_diagnostic(gaugecla_ward, "Ward's D", gaugegow_o15y)
-cluster_diagnostic(gaugecla_ward2, "Ward's D2", gaugegow_o15y)
-cluster_diagnostic(gaugecla_UPGMA, "UPGMA", gaugegow_o15y)
-#UPGMA leads to too much chaining, and Ward's D has higher cophenetic correlation and reaches an elbow after 7 (rather than 8 classes for D2)
-
-#Test significance of classes
-#clus.stab <- pvclust(t(HITdf_cast[,-1]), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
-#plot(clus.stab)
-#pvrect(clus.stab, alpha=0.90)
-
-#TO DO:
-# - Compare classifications based on adjusted Rand Index (ARI)
 
 #Make table of gauge classes and good looking dendogram
-classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614") #7 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
-
-prettydend <- function(gaugecla, dir, imgname, colors=classcol, kclass=7) {
+prettydend <- function(gaugecla, dir, imgname, colorder=NULL, colors=classcol, kclass=7) {
   classr <-cutree(gaugecla, k=kclass, order_clusters_as_data = FALSE)
   classr_df <- data.frame(ID=names(classr), gclass=classr) 
   outdirclass <- file.path(outdir,dir)
@@ -296,17 +310,43 @@ prettydend <- function(gaugecla, dir, imgname, colors=classcol, kclass=7) {
   gaugecla_ward_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward_name$labels,], 
                                     paste(RGS_No,"-",RGS_Loc," River at ", RGS_Name,sep=""))
   dendname <- as.dendrogram(gaugecla_ward_name)
+  
+  if (is.null(colorder)) colorder = 1:kclass
   png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=300)
   par(mar=c(3,3,0,21.5)) #bottom left top right
   dendname %>% set("branches_lwd", 2.5) %>% 
-    color_branches(k=kclass, col=colors[1:kclass], groupLabels=T) %>% 
+    color_branches(k=kclass, col=colors[colorder], groupLabels=T) %>% 
     #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
-    color_labels(k=kclass, col=colors[1:kclass]) %>%
+    color_labels(k=kclass, col=colors[colorder]) %>%
     plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID - River at Location",mgp=c(1.5,0.5,0))
   dev.off()
   
-  return(classr_df)
+  return(list(classr_df, dendname))
 }
+
+#Define class colors
+classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614","#6baed6","#00441b") #9 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
+classcol_temporal <- c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#666666','#a65628')
+#,
+######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
+################################################ Classify based on all indices and diagnostic ############################################
+gaugegow_o15y <- HITdist(HITo15y, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
+gaugecla_ward <-hclust(gaugegow_o15y, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugecla_ward2 <-hclust(gaugegow_o15y, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
+gaugecla_UPGMA <-hclust(gaugegow_o15y, method='average') #Classify using  UPGMA
+
+#Classification diagnostics
+cluster_diagnostic(gaugecla_ward, "o15y Ward's D", gaugegow_o15y)
+cluster_diagnostic(gaugecla_ward2, "o15y Ward's D2", gaugegow_o15y)
+cluster_diagnostic(gaugecla_UPGMA, "o15y UPGMA", gaugegow_o15y)
+#UPGMA leads to too much chaining, and Ward's D has higher cophenetic correlation and reaches an elbow after 7 (rather than 8 classes for D2)
+
+#Test significance of classes
+#clus.stab <- pvclust(t(HITdf_cast[,-1]), method.hclust='ward.D', method.dist='cor',use.cor="pairwise.complete.obs", nboot=4999)
+#plot(clus.stab)
+#pvrect(clus.stab, alpha=0.90)
+
+#Make table of gauge classes and good looking dendogram
 classr_ward_7df <- prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='7class_dendrogram.png', kclass=7)
 classr_ward_6df <- prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='6class_dendrogram.png', kclass=6)
 classr_ward2_7df <- prettydend(gaugecla_ward2, dir='classo15y_ward2_raw',imgname='7class_dendrogram.png', kclass=7)
@@ -317,24 +357,23 @@ gaugegow_o15ysub1 <- HITdist(HITo15ysub1, logmetrics=TRUE) #Format hydro metrics
 gaugecla_wardsub1 <-hclust(gaugegow_o15ysub1, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 gaugecla_ward2sub1 <-hclust(gaugegow_o15ysub1, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
 gaugecla_UPGMAsub1 <-hclust(gaugegow_o15ysub1, method='average') #Classify using UPGMA
-cluster_diagnostic(gaugecla_wardsub1, "Ward's D sub1", gaugegow_o15ysub1)
-cluster_diagnostic(gaugecla_ward2sub1, "Ward's D2 sub1", gaugegow_o15ysub1)
-cluster_diagnostic(gaugecla_UPGMAsub1, "UPGMA sub1", gaugegow_o15ysub1)
+cluster_diagnostic(gaugecla_wardsub1, "o15y Ward's D sub1", gaugegow_o15ysub1)
+cluster_diagnostic(gaugecla_ward2sub1, "o15y Ward's D2 sub1", gaugegow_o15ysub1)
+cluster_diagnostic(gaugecla_UPGMAsub1, "o15y UPGMA sub1", gaugegow_o15ysub1)
 
 #Subset 2
 gaugegow_o15ysub2 <- HITdist(HITo15ysub2, logmetrics=TRUE) 
 gaugecla_wardsub2 <-hclust(gaugegow_o15ysub2, method='ward.D') 
-cluster_diagnostic(gaugecla_wardsub2, "Ward's D sub2", gaugegow_o15ysub2)
+cluster_diagnostic(gaugecla_wardsub2, "o15y Ward's D sub2", gaugegow_o15ysub2)
 
 #Subset 3
-
 gaugegow_o15ysub3 <- HITdist(HITo15ysub3, logmetrics=TRUE) 
 gaugecla_wardsub3 <-hclust(gaugegow_o15ysub3, method='ward.D') 
 gaugecla_ward2sub3 <-hclust(gaugegow_o15ysub3, method='ward.D2')
 gaugecla_UPGMAsub3 <-hclust(gaugegow_o15ysub3, method='average')
-cluster_diagnostic(gaugecla_wardsub3, "Ward's D sub3", gaugegow_o15ysub3)
-cluster_diagnostic(gaugecla_ward2sub3, "Ward's D2 sub3", gaugegow_o15ysub3)
-cluster_diagnostic(gaugecla_UPGMAsub3, "UPGMA sub3", gaugegow_o15ysub3)
+cluster_diagnostic(gaugecla_wardsub3, "o15y Ward's D sub3", gaugegow_o15ysub3)
+cluster_diagnostic(gaugecla_ward2sub3, "o15y Ward's D2 sub3", gaugegow_o15ysub3)
+cluster_diagnostic(gaugecla_UPGMAsub3, "o15y UPGMA sub3", gaugegow_o15ysub3)
 #The only class difference is that 1KA11 changes group to be more spatially contiguous with headwater G. Ruaha. Between Ward's D and D2,
 #Difference in relateness of major groups.
 
@@ -354,6 +393,71 @@ classsub3_ward_7df <-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',
 classsub3_ward_6df <-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='6class_dendrogram.png', kclass=6)
 classsub3_ward2_7df <-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='7class_dendrogram.png', kclass=7)
 classsub3_ward2_6df <-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='6class_dendrogram.png', kclass=6)
+
+######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 5 YEARS OF DATA ################################
+gaugegow_o5ysub3 <- HITdist(HITo5ysub3, logmetrics=TRUE) 
+gaugecla_o5y_wardsub3 <-hclust(gaugegow_o5ysub3, method='ward.D') 
+gaugecla_o5y_ward2sub3 <-hclust(gaugegow_o5ysub3, method='ward.D2')
+cluster_diagnostic(gaugecla_o5y_wardsub3, "o5y Ward's D sub3", gaugegow_o5ysub3)
+cluster_diagnostic(gaugecla_o5y_ward2sub3, "o5y Ward's D2 sub3", gaugegow_o5ysub3)
+
+#Make dendograms
+o5y_classsub3_ward_7df <-prettydend(gaugecla_o5y_wardsub3, dir='classo5y_ward_rawsub3',imgname='7class_dendrogram_sub3.png', kclass=7)
+o5y_classsub3_ward2_7df <-prettydend(gaugecla_o5y_ward2sub3, dir='classo5y_ward2_rawsub3',imgname='7class_dendrogram_sub3.png', kclass=7)
+o5y_classsub3_ward_8df <-prettydend(gaugecla_o5y_wardsub3, dir='classo5y_ward_rawsub3',imgname='8class_dendrogram_sub3.png', kclass=8)
+o5y_classsub3_ward2_8df <-prettydend(gaugecla_o5y_ward2sub3, dir='classo5y_ward2_rawsub3',imgname='8class_dendrogram_sub3.png', kclass=8)
+o5y_classsub3_ward_9df <-prettydend(gaugecla_o5y_wardsub3, dir='classo5y_ward_rawsub3',imgname='9class_dendrogram_sub3.png', kclass=9,
+                                    colorder=c(8, 2,3,5,1,7,6,9,4))
+o5y_classsub3_ward2_9df <-prettydend(gaugecla_o5y_ward2sub3, dir='classo5y_ward2_rawsub3',imgname='9class_dendrogram_sub3.png', kclass=9,
+                                     colorder=c(8, 2,3,5,1,7,6,9,4))
+
+#Compare classifications based on adjusted Rand Index (ARI)
+classr_o15y <-cutree(gaugecla_wardsub3, k=7, order_clusters_as_data = FALSE)
+classr_o5y <-cutree(gaugecla_o5y_wardsub3, k=7, order_clusters_as_data = FALSE)
+cluster_similarity(classr_o15y, classr_o5y[which(names(classr_o5y) %in% names(classr_o15y))], similarity="rand", method='independence')
+comembership_table(classr_o15y, classr_o5y[which(names(classr_o5y) %in% names(classr_o15y))])
+
+######################################### CLASSIFICATION BASED ON DATA PRE-1983 > 10 YEARS OF DATA ################################
+gaugegow_pre83sub3 <- HITdist(HITpre83sub3, logmetrics=TRUE) 
+gaugecla_pre83_wardsub3 <-hclust(gaugegow_pre83sub3, method='ward.D') 
+cluster_diagnostic(gaugecla_pre83_wardsub3, "pre83 Ward's D sub3", gaugegow_pre83sub3)
+
+#Make dendograms
+pre83_classsub3_ward_5df <-prettydend(gaugecla_pre83_wardsub3, dir='classpre83_ward_rawsub3',
+                                      imgname='5class_dendrogram_sub3.png', colors=classcol_temporal, kclass=5)
+pre83_classsub3_ward_6df <-prettydend(gaugecla_pre83_wardsub3, dir='classpre83_ward_rawsub3',
+                                      colors=classcol_temporal,imgname='6class_dendrogram_sub3.png', kclass=6)
+pre83_classsub3_ward_7df <-prettydend(gaugecla_pre83_wardsub3, dir='classpre83_ward_rawsub3',
+                                      colors=classcol_temporal,imgname='7class_dendrogram_sub3.png', kclass=7)
+                                  
+######################################### CLASSIFICATION BASED ON DATA POST-1991 > 10 YEARS OF DATA ################################
+gaugegow_post91sub3 <- HITdist(HITpost91sub3, logmetrics=TRUE) 
+gaugecla_post91_wardsub3 <-hclust(gaugegow_post91sub3, method='ward.D') 
+cluster_diagnostic(gaugecla_post91_wardsub3, "post91 Ward's D sub3", gaugegow_post91sub3)
+
+#Make dendograms
+post91_classsub3_ward_5df <-prettydend(gaugecla_post91_wardsub3, dir='classpost91_ward_rawsub3',
+                                       colors=classcol_temporal,imgname='5class_dendrogram_sub3.png', kclass=5)
+post91_classsub3_ward_6df <-prettydend(gaugecla_post91_wardsub3, dir='classpost91_ward_rawsub3',
+                                       colors=classcol_temporal,imgname='6class_dendrogram_sub3.png', kclass=6,
+                                       colorder = c(1,2,3,4,7,5))
+post91_classsub3_ward_7df <-prettydend(gaugecla_post91_wardsub3, dir='classpost91_ward_rawsub3',
+                                       colors=classcol_temporal,imgname='7class_dendrogram_sub3.png', kclass=7)
+
+#Compare classifications 
+#With tanglegram (see https://cran.r-project.org/web/packages/dendextend/vignettes/introduction.html)
+dl <- dendlist(pre83_classsub3_ward_5df[2][[1]], post91_classsub3_ward_5df[2][[1]])
+pdf(file.path(outdir,'classpost91_ward_rawsub3','tanglegram_pre83post91.pdf'),width = 8, height=4)
+dl %>% untangle(method= "step2side") %>%
+  tanglegram(common_subtrees_color_branches=T, dLeaf=-0.05, margin_inner=10,lab.cex=0.5, highlight_distinct_edges  = FALSE)
+dev.off()
+
+#with ARI
+classr_pre83 <-cutree(gaugecla_pre83_wardsub3, k=7, order_clusters_as_data = FALSE)
+classr_post91 <-cutree(gaugecla_post91_wardsub3, k=7, order_clusters_as_data = FALSE)
+cluster_similarity(classr_pre83, classr_post91, similarity="rand", method='independence')
+comembership_table(classr_pre83, classr_post91)
+
 
 ######################################################## Class hydrograph plots ################
 hydrographplots <- function(hydrodat, classtab, dir, kclass) {
@@ -416,15 +520,13 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
   dev.off()
 }
 
-hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_7df, dir='classo15y_ward_rawsub3', kclass=7)
-hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_6df, dir='classo15y_ward_rawsub3', kclass=6)
-hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_7df, dir='classo15y_ward_raw', kclass=7)
-hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_6df, dir='classo15y_ward_raw', kclass=6)
-
-
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_7df[1], dir='classo15y_ward_rawsub3', kclass=7)
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_6df[1], dir='classo15y_ward_rawsub3', kclass=6)
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_7df[1], dir='classo15y_ward_raw', kclass=7)
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_6df[1], dir='classo15y_ward_raw', kclass=6)
 
 ######################################################## Dominant metric analysis ##############
-classHIT <- merge(HITo15y, classsub3_ward_7df, by="ID")
+classHIT <- merge(HITo15y, classsub3_ward_7df[1], by="ID")
 
 classHIT_KW <- dcast(setDT(classHIT), ID+gclass~indice)
 #To do:
@@ -697,13 +799,13 @@ networkclasspredict <- function(hydrodat, classtab, genv, netenv, vars, varslabe
   write.dbf(rufi_predsub, file.path(outdirclass, paste0(kclass,"predict_sub.dbf")))
 }
 
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_7df, genv=gagesenv_format, netenv=rufienvsub_std, 
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_7df[1], genv=gagesenv_format, netenv=rufienvsub_std, 
                     vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_rawsub3')
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_6df, genv=gagesenv_format, netenv=rufienvsub_std, 
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_6df[1], genv=gagesenv_format, netenv=rufienvsub_std, 
                     vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_rawsub3')
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_7df, genv=gagesenv_format, netenv=rufienvsub_std, 
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_7df[1], genv=gagesenv_format, netenv=rufienvsub_std, 
                     vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_raw')
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_6df, genv=gagesenv_format, netenv=rufienvsub_std, 
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_6df[1], genv=gagesenv_format, netenv=rufienvsub_std, 
                     vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_raw')
 
 #CV boosted tree
