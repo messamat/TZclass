@@ -12,9 +12,6 @@
 #N.B: here, filtering of gages based on environmental disturbance and non-stationarity is subsequent to analysis based on flow record length and overlap
 # in order to be as inclusive as possible.
 
-###### TO UPDATE SO AS NOT TO INCLUDE YEARS WITH DAYS OVERLAPPING 37 DAY GAPS ######
-### EVEN IN HOW NUMBER OF YEARS ARE COMPUTED ###
-
 library(ggplot2)
 library(data.table)
 library(FlowScreen)
@@ -107,7 +104,6 @@ predsmelt[,hdoy:=ifelse(month>=10,
                         doy-as.numeric(format(as.Date(paste(year,'-10-01',sep="")),"%j")),
                         doy+as.numeric(format(as.Date(paste(year-1,'-12-31',sep="")),"%j"))-as.numeric(format(as.Date(paste(year-1,'-10-01',sep="")),"%j")))] 
 
-#######UPDATE NEEDED, MAKE SURE THAT FACTOR COLUMNS REMAIN SO#########################
 ##########################################
 #Build summary tables
 rufidat_dt <- data.table(rufidat_clean)
@@ -264,25 +260,19 @@ tryoverlap<-overlapplot[period_len>=30 & minyr>=15 & completeness>=0.25 & count>
 print(tryoverlap)
 
 #####################################################################
-#Select subset of gages to be used in the analysis
+#Compute number of years of data for later subsetting of gages 
 #####################################################################
-#Have over 10 years of 90% complete data from 1991/10/01 
-rufidat_post1991 <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37 & hyear>=1991,length(unique(hyear)),.(ID)] #For each gauge, compute number of years after 1991 with at least 90% of data
-colnames(rufidat_post1991) <- c('ID','ycount1991')
-rufidat_post1991[rufidat_post1991$ycount>=10,] #Check stations with at least 15 years
-write.csv(rufidat_post1991, file.path(outdir, 'gageselect_post1991comp90.csv'), row.names=F)
-gageselect1991 <- rufidat_post1991[rufidat_post1991$ycount>=10,] #Select gages with at least 10 years of data from 1991-2016
-
-rufidat_post2001 <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37 & hyear>=2001,length(unique(hyear)),.(ID)] #For each gauge, compute number of years after 2001 with at least 90% of data
-colnames(rufidat_post2001) <- c('ID','ycount2001')
-rufidat_post2001[rufidat_post2001$ycount>=10,]
-write.csv(rufidat_post2001, file.path(outdir, 'gageselect_post2001comp90.csv'), row.names=F)
-gageselect2001 <- rufidat_post2001[rufidat_post2001$ycount>=10,]
-
-#Have over 15 years over the length of record
-rufidat_o15y <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37,length(unique(hyear)),.(ID)]
-colnames(rufidat_o15y) <- c('ID','ycount_o15')
-write.csv(rufidat_o15y, file.path(outdir, 'gageselect_o15comp90.csv'), row.names=F)
+#< 10% missing data, full length of record
+ycount_full <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37,length(unique(hyear)),.(ID)]
+#< 10% missing data, pre-1983
+ycount_pre83 <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37 & hyear>1958 & hyear<=1983,length(unique(hyear)),.(ID)]
+#< 10% missing data, post-2001
+ycount_post01 <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37 & hyear>1991 & hyear<=2016,length(unique(hyear)),.(ID)]
+rufidat_ycount <- merge(ycount_full, ycount_pre83, by='ID',all.x=T)
+rufidat_ycount <- merge(rufidat_ycount, ycount_post01, by='ID',all.x=T)
+rufidat_ycount[is.na(rufidat_ycount)] <- 0
+colnames(rufidat_ycount) <- c('ID','ycount_full', 'ycount_pre83', 'ycount_post01')
+write.csv(rufidat_ycount, file.path(outdir, 'rufidat_ycount.csv'), row.names=F)
 
 ####
 rufidat_clean <- merge(rufidat_clean, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
@@ -290,10 +280,10 @@ rufidat_clean <- merge(rufidat_clean, rufidat_gapsummary, by=c('ID','hyear'),all
 
 #Final set of gauges
 #Select subset of gauges: include 1KB32 even if only 14 years of data + Kisigo stations but skip 1KB28 with simulated data
-predsmelt <- merge(predsmelt, rufidat_o15y, by='ID',all.x=T)
+predsmelt <- merge(predsmelt, rufidat_ycount, by='ID',all.x=T)
 predsmelt <- merge(predsmelt, rufidat_gapsummary, by=c('ID','hyear'),all.x=T)
 rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & predsmelt$ID !='1KB28' & 
-                                   (predsmelt$ycount_o15>=15 | predsmelt$ID=='1KB32') | 
+                                   (predsmelt$ycount_full>=15 | predsmelt$ID=='1KB32') | 
                                    (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
                                    (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
 
@@ -336,9 +326,9 @@ plotseries <- function(gage){ #Make a graph of a time series highlighting delete
   genv <- gagesenv[gagesenv$RGS_No==gage,]
   #Generate FlowScreen time series
   gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
-  gts_sel <- merge(gts, rufidat_o15y, by='ID', all.x=T)
+  gts_sel <- merge(gts, rufidat_ycount, by='ID', all.x=T)
   gts_sel <- merge(gts_sel, rufidat_gapsummary[,c('ID','hyear','gap_per')], by=c('ID','hyear'))
-  gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Selected data from 1954 to 2018: ", unique(gts_sel$ycount_o15)," years.",sep="")
+  gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Selected data from 1954 to 2018: ", unique(gts_sel$ycount_full)," years.",sep="")
   #Make raw time series plot
   rawsgplot <-ggplot() +
     geom_point(data=gts_sel, aes(x=Date, y=Flow), color='#bf812d', size=1.5)+ 
@@ -400,7 +390,7 @@ min(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
 max(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
 "The average percentage of missing data per year across all gauges was 14% (min=1%, max=59%)." 
 
-mean(rufidat_select_o15y$ycount_o15)
+mean(rufidat_select_o15y$ycount_full)
 
 #####################################################################
 #Assess representativity of gages regarding environmental variables
@@ -540,8 +530,6 @@ envplot <- function(selected_gages, plotname) {
   dev.off()
 }
 envplot(rufidat_select_o15y, 'gage_envo15y.png')
-
-gageselect_o15y[which(!(gageselect_o15y$ID %in% gageselect1991$ID)),]
 
 ##################################In multidimensional environment####################
 #Make subset of data
