@@ -40,6 +40,7 @@
 library(stringr)
 library(fastcluster)
 library(cluster)
+library(ggplot2)
 
 rootdir="F:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
 
@@ -142,7 +143,7 @@ if (dir.exists(outdir)) {
   dir.create(outdir)
 }
 write.csv(classr_df, file.path(outdir,paste0(kclass,'classtab.csv')), row.names=F)
-
+classr_df <-read.csv(file.path(outdir,paste0(kclass,'classtab.csv')))
 
 
 gauge_gow<- gowdis(tzenvsub_std, w=rep(1,ncol(tzenvsub_std)), asym.bin = NULL) #Compute Gower's distance so that missing values will not be taken in account
@@ -155,12 +156,12 @@ gaugecla_UPGMA <-hclust(gaugegow_o15y, method='average') #Classify using  UPGMA
 #################### Make table ###############################
 classenv <- merge(tzenv[,c('GridID',pred_envar)], classr_df, by="GridID")
 classenv_melt <- melt(classenv, id.vars=c('GridID','gclass'),value.name='Value')
-#pred_envar[which(!(pred_envar %in% colnames(tzenv)))]
+pred_envar[which(!(pred_envar %in% colnames(tzenv)))]
 
 df <- classenv_melt
 
 classtableformat <- function(df, tabname) {
-  classenv_stats<- setDT(df)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(variable, gclass)] #Get mean and SD of hydrologic metric for each class
+  classenv_stats<- setDT(df)[,`:=`(classmean=mean(Value, na.rm=T),classsd=sd(Value,na.rm=T)), .(variable, gclass)] #Get mean and SD of hydrologic metric for each class
   classenv_stats <- classenv_stats[!duplicated(classenv_stats[,c('variable','gclass')]),]
   classenv_statsmean <- as.data.frame(dcast(classenv_stats, gclass~variable, value.var='classmean'))
   classenv_statssd <- as.data.frame(dcast(classenv_stats, gclass~variable, value.var='classsd'))
@@ -174,31 +175,31 @@ classtableformat <- function(df, tabname) {
   
   classenv_format[is.na(classenv_format$classsd),'tabcol']  <- '–'
   table <- as.data.frame(dcast(classenv_format, Variable~gclass, value.var='tabcol'))
-  table <- table[with(Variables, order(type, num)),] #Order rows by Variables number
+  table <- table[with(variables, order(type, num)),] #Order rows by Variables number
   
   kable(table) %>%
     kable_styling(bootstrap_options = "striped", font_size = 10) %>%
-    row_spec(which(table$Metric %in% envo15ysub3$indice), bold=T) %>%
-    column_spec(2,color=classcol[1]) %>%
-    column_spec(3,color=classcol[2]) %>%
-    column_spec(4,color=classcol[3]) %>%
-    column_spec(5,color=classcol[4]) %>%
-    column_spec(6,color=classcol[5]) %>%
-    column_spec(7,color=classcol[6]) %>%
-    column_spec(8,color=classcol[7]) %>%
+    #row_spec(which(table$Metric %in% envo15ysub3$indice), bold=T) %>%
+    # column_spec(2,color=classcol[1]) %>%
+    # column_spec(3,color=classcol[2]) %>%
+    # column_spec(4,color=classcol[3]) %>%
+    # column_spec(5,color=classcol[4]) %>%
+    # column_spec(6,color=classcol[5]) %>%
+    # column_spec(7,color=classcol[6]) %>%
+    # column_spec(8,color=classcol[7]) %>%
     save_kable(tabname, self_contained=T)
 }
-classtableformat(classenv, KWtab=metricKW, tabname='deductive_envgclass_cast.doc')
+classtableformat(classenv,tabname='deductive_envgclass_cast.doc')
 
 classcol=c('#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99',
            '#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a')
 
 env_labels<-setNames(pred_envarname,pred_envar) #Set metrics labels
 #Boxplot of metrics for each class
-classenvplot <-ggplot(classenv_melt[!(classenv_melt$variable %in% c('WsArea','ReaElvAvg','WsWatSea')),], aes(x=as.factor(gclass), y=value+0.01, color=as.factor(gclass))) + 
+classenvplot <-ggplot(classenv_melt[!(classenv_melt$variable %in% c('WsArea','ReaElvAvg','WsWatSea')),], aes(x=as.factor(gclass), y=Value+0.01, color=as.factor(gclass))) + 
   geom_boxplot(outlier.shape = NA)+
   scale_y_continuous(name='Metric value',expand=c(0.05,0)) +
-  scale_x_discrete(name='Hydrologic class')+
+  scale_x_discrete(name='River class')+
   scale_colour_manual(values=classcol) + 
   theme_classic() +
   theme(axis.title = element_text(size=14),
