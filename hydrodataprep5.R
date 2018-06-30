@@ -310,13 +310,19 @@ template <-ggplot() +
              aes(x=Date, y=Flow,color='darkblue'), size=1.5)+
   scale_colour_manual(name='Hydrologic record',
                       values =c('brown'='#bf812d','red'='#e31a1c','lightblue'='#9ecae1','darkblue'='#045a8d'),
-                      labels = c('Interpolated','Used in classification','Not used in classification','Deleted')) +
+                      labels = c('Interpolated','< 10% missing data','> 10% missing data','Deleted')) +
   scale_y_sqrt(expand=c(0,0),limits=c(0,max(gts$Flow)+1))+
   scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits=as.Date(c('1954-01-01','2018-06-01')), expand=c(0,0)) + 
   labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - "))+
   theme_bw() + 
-  theme(axis.text.x = element_text(angle = 45, hjust=1))
-print(template)
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        legend.text = element_text(size=8, lineheight=0.1),
+        legend.box.background = element_blank(),
+        legend.background = element_blank(),
+        legend.margin=margin(t = 0, unit='cm'),
+        legend.key.height=unit(0.75,"line"),
+        legend.title = element_text(size=8))
+#print(template)
 #Get legend as a grob
 legendts <- get_legend(template)
 
@@ -328,24 +334,35 @@ plotseries <- function(gage){ #Make a graph of a time series highlighting delete
   gts<- create.ts(predsmelt[predsmelt$ID==gage,])  #Cannot run ts on multiple gages. Need to first subset by gage, then run ts.
   gts_sel <- merge(gts, rufidat_ycount, by='ID', all.x=T)
   gts_sel <- merge(gts_sel, rufidat_gapsummary[,c('ID','hyear','gap_per')], by=c('ID','hyear'))
-  gname <- paste(genv$RGS_Loc," river at ",genv$RGS_Name,". Selected data from 1954 to 2018: ", unique(gts_sel$ycount_full)," years.",sep="")
+  print(genv$RGC_Loc)
   #Make raw time series plot
   rawsgplot <-ggplot() +
-    geom_point(data=gts_sel, aes(x=Date, y=Flow), color='#bf812d', size=1.5)+ 
-    geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow),color='#e31a1c', size=1.5)+
-    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow),color='#9ecae1', size=1.5)+
+    geom_point(data=gts_sel, aes(x=Date, y=Flow), color='#bf812d', size=0.5)+ 
+    geom_point(data=rufidat_deleted[rufidat_deleted$ID==gage,], aes(x=Date, y=Flow),color='#e31a1c', size=0.5)+
+    geom_point(data=rufidat_clean[rufidat_clean$ID==gage,], aes(x=Date, y=Flow),color='#9ecae1', size=0.5)+
     geom_point(data=rufidat_clean[rufidat_clean$ID==gage & 
-                                    rufidat_clean$hyear %in%  as.data.frame(rufidat_gapsummary)[rufidat_gapsummary$ID==gage & rufidat_gapsummary$gap_per<=0.1,'hyear'],],
-               aes(x=Date, y=Flow),color='#045a8d', size=1.5)+
+                                    rufidat_clean$hyear %in%  as.data.frame(rufidat_gapsummary)[rufidat_gapsummary$ID==gage & 
+                                                                                                  rufidat_gapsummary$gap_per<=0.1,'hyear'],],
+               aes(x=Date, y=Flow),color='#045a8d', size=0.5)+
     scale_y_sqrt(expand=c(0,0),limits=c(0,max(gts$Flow)+1))+
     scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits=as.Date(c('1954-01-01','2018-06-01')), expand=c(0,0)) + 
-    labs(y='Discharge (m3/s)', title=paste(gage, gname,sep=" - ")) +
+    labs(y='Discharge (m3/s)', 
+         title=bquote(paste(.(gage)-.(as.character(genv$RGS_Loc)) ~'River at' ~ .(as.character(genv$RGS_Name)),'.')))+
     theme_bw() + 
     theme(axis.text.x = element_text(angle = 45, hjust=1),
-          legend.position = 'none')
+          legend.position = 'none',
+          text= element_text(size=8,lineheight = 0),
+          plot.title= element_text(size=8,margin = margin(t = 0, r = 0, b = 0, l = 0)),
+          plot.margin=unit(c(-0,0,-0,-0), "cm"),
+          axis.title.x= element_text(margin = margin(t = 0, r = 20, b = 0, l = 0)),
+          axis.title.y=element_text(vjust=-0.5),
+          panel.grid.minor= element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_line()
+          )
   p <- ggplot_gtable(ggplot_build(rawsgplot))
-  lay= t(c(rep(1,10),2))
-  png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
+  lay= t(c(rep(1,4),2))
+  png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 6.5, height=4.5,units='in',res=300)
   print(grid.arrange(p, legendts, ncol = 11, layout_matrix = lay))
   dev.off()
 }
@@ -376,7 +393,7 @@ plotflowscreen <- function(gage, div,thrs){ #make graphs of FlowScreen package o
 }
 for (g in unique(predsmelt$ID)) {
   plotseries(g)
-  plotflowscreen(g,div=1,thrs=0.5)
+  #plotflowscreen(g,div=1,thrs=0.5)
 }
 
 ##################################Report statistics#######################
