@@ -265,7 +265,20 @@ HITdist <- function(HITdf, logmetrics) {
 }
 
 #Get summary results and diagnostics for classification
-cluster_diagnostic <- function(clusterres, clusname, gowdis, format='pdf') {
+hclus.scree <- function(x,ylabel,...){
+  
+  old.par<-par(no.readonly=TRUE)
+  par(ps = 14, cex = 1, cex.main = 1,mai=c(1,1,0.25,0.25))
+  z1<-seq(length(x$height),1)
+  z<-as.data.frame(cbind(z1,sort(x$height)))
+  plot(z[,1],z[,2],type='o',lwd=1.5,pch=19,col='blue',
+       main=NULL,ylab=ylabel,xlab='Number of clusters',...)
+  par(old.par)
+}
+#main=paste('Scree Plot of Hierarchical Clustering ',
+#           '(',x$dist.method,', ',x$method,')',sep='')
+
+cluster_diagnostic <- function(clusterres, clusname, gowdis, ylabel="Gower's distance", format='pdf') {
   #hclus.table(clusterres)
   coef.hclust(clusterres) #Compute agglomerative coefficient
   #cor(gowdis, cophenetic(clusterres)) #Compute cophenetic coefficient
@@ -280,7 +293,7 @@ cluster_diagnostic <- function(clusterres, clusname, gowdis, format='pdf') {
   if (format=='pdf'){
     pdf(file.path(outdir, paste(clusname,'r6r_scree','.pdf',sep="")), width=8, height=8)
   }
-  hclus.scree(clusterres) 
+  hclus.scree(clusterres, ylabel=ylabel, frame.plot=FALSE,cex=1, xlim=c(0,length(clusterres$height)+5), ylim=c(0,max(clusterres$height)+0.1), xaxs='i', yaxs='i') 
   dev.off()
   #Plot dendogram
   png(file.path(outdir, paste(clusname,'r6r_dendogram','.png',sep="")), width=8, height=8, units='in',res=300)
@@ -743,18 +756,22 @@ pred_envarname <- c('Reach elevation', "Catchment area","Average elevation","Ave
 pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname) #Prepare labels
 
 #Format data for prediction
-networkclasspredict <- function(hydrodat, classtab, genv, netenv, vars, varslabel, kclass, dir) {
+networkclasspredict <- function(hydrodat, classtab, genv, netenvstd, netenv, vars, varslabel, kclass, dir) {
   outdirclass <- file.path(outdir,dir)
   gagesenvsel <- genv[genv$RGS_No %in% unique(hydrodat$ID),] #Subset gauges environmental data
   gagesenv_class_join  <- merge(gagesenvsel,classtab, by.x='RGS_No', by.y='ID') #Merge with class assignment df
   rownames(gagesenv_class_join) <- gagesenv_class_join$RGS_No
   gagesenv_class_join <- gagesenv_class_join[,-which(colnames(gagesenv_class_join) %in% c('RGS_No','GridID'))]  
   gagesenv_class_join$gclass <- as.factor(gagesenv_class_join$gclass) #Factorize gclass
-  rownames(netenv) <- netenv$GridID
+  rownames(netenvstd) <- netenvstd$GridID
   
   #Single tree
+  colnames(gagesenv_class_join[,c('gclass',vars)])[-1] <- paste0(colnames(gagesenv_class_join[,c('gclass',vars)])[-1],'_std')
+  gagesenv_class_join
   cat <- rpart(gclass~., data=gagesenv_class_join[,c('gclass',vars)], method='class',control=rpart.control(minsplit=2, minbucket=2, cp=0.025))
   summary(cat)
+  prp(cat, col=classcol[1:kclass])
+  
   pdf(file.path(outdirclass,paste0(kclass,'class_predict_tree_example.pdf')),width = 6, height=4)
   prp(cat, col=classcol[1:kclass])
   dev.off()
@@ -777,10 +794,10 @@ networkclasspredict <- function(hydrodat, classtab, genv, netenv, vars, varslabe
   dev.off()
   
   #Predict and output 
-  rufi_pred <- predict.boosting(adaboost.bt, newdata=netenv[,vars], newmfinal=length(adaboost.bt$trees))
+  rufi_pred <- predict.boosting(adaboost.bt, newdata=netenvstd[,vars], newmfinal=length(adaboost.bt$trees))
   #rufi_maxprob <- adply(rufi_pred$prob, 1, max)
   #qplot(rufi_maxprob$V1)
-  rufi_pred <- data.frame(GridID=as.integer(rownames(netenv)),gclass=rufi_pred$class)
+  rufi_pred <- data.frame(GridID=as.integer(rownames(netenvstd)),gclass=rufi_pred$class)
   rufi_pred_env <- merge(rufi_pred, rufienv, by='GridID')
   
   #Identify those areas of the network where environmental variables are outside of gauges' range
@@ -815,14 +832,16 @@ networkclasspredict <- function(hydrodat, classtab, genv, netenv, vars, varslabe
   write.dbf(rufi_predsub, file.path(outdirclass, paste0(kclass,"predict_sub.dbf")))
 }
 
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_7df[1], genv=gagesenv_format, netenv=rufienvsub_std, 
-                    vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_rawsub3')
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_6df[1], genv=gagesenv_format, netenv=rufienvsub_std, 
-                    vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_rawsub3')
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_7df[1], genv=gagesenv_format, netenv=rufienvsub_std, 
-                    vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_raw')
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_6df[1], genv=gagesenv_format, netenv=rufienvsub_std, 
-                    vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_raw')
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_7df[1], genv=gagesenv_format, netenvstd=rufienvsub_std, 
+                    netenv=rufienvsub, vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_rawsub3')
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_6df[1], genv=gagesenv_format, netenvstd=rufienvsub_std, 
+                    netenv=rufienvsub,vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_rawsub3')
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_7df[1], genv=gagesenv_format, netenvstd=rufienvsub_std, 
+                    netenv=rufienvsub,vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_raw')
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_6df[1], genv=gagesenv_format, netenvstd=rufienvsub_std, 
+                    netenv=rufienvsub,vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_raw')
+
+#In the end, keep classub3_ward_7df
 
 #CV boosted tree
 #adaboostcv.r7r <- boosting.cv(gclass~., data=gagesenv_class_join[,c('gclass',vars)], boos=TRUE, mfinal=1000,  
