@@ -4,9 +4,9 @@
 #Subtask B-1 and B-2
 
 #Authors: Mathis L. Messager and Dr. Julian D. Olden
-#Contact info: messamat@uw.edu
+#Contact info: messamat@uw.edu - please do not hesitate to reach out for clarifications regarding the code or for troubleshooting help
 #Date created: 03/30/2018
-#Date last updated: 05/25/2018
+#Date last updated: 06/29/2018
 
 #Purpose: compute hydrological metrics, classify stream gauges, and predict class membership for Rufiji network
 
@@ -402,7 +402,8 @@ cluster_diagnostic(gaugecla_o5y_wardsub3, "o5y Ward's D sub3", gaugegow_o5ysub3)
 cluster_diagnostic(gaugecla_o5y_ward2sub3, "o5y Ward's D2 sub3", gaugegow_o5ysub3)
 
 #Make dendograms
-o5y_classsub3_ward_7df <-prettydend(gaugecla_o5y_wardsub3, dir='classo5y_ward_rawsub3',imgname='7class_dendrogram_sub3.png', kclass=7)
+o5y_classsub3_ward_7df <-prettydend(gaugecla_o5y_wardsub3, dir='classo5y_ward_rawsub3',imgname='7class_dendrogram_sub3.png', kclass=7,
+                                    colorder=c(8, 2,3,5,1,7,4))
 o5y_classsub3_ward2_7df <-prettydend(gaugecla_o5y_ward2sub3, dir='classo5y_ward2_rawsub3',imgname='7class_dendrogram_sub3.png', kclass=7)
 o5y_classsub3_ward_8df <-prettydend(gaugecla_o5y_wardsub3, dir='classo5y_ward_rawsub3',imgname='8class_dendrogram_sub3.png', kclass=8)
 o5y_classsub3_ward2_8df <-prettydend(gaugecla_o5y_ward2sub3, dir='classo5y_ward2_rawsub3',imgname='8class_dendrogram_sub3.png', kclass=8)
@@ -447,9 +448,9 @@ post91_classsub3_ward_7df <-prettydend(gaugecla_post91_wardsub3, dir='classpost9
 #Compare classifications 
 #With tanglegram (see https://cran.r-project.org/web/packages/dendextend/vignettes/introduction.html)
 dl <- dendlist(pre83_classsub3_ward_5df[2][[1]], post91_classsub3_ward_5df[2][[1]])
-pdf(file.path(outdir,'classpost91_ward_rawsub3','tanglegram_pre83post91.pdf'),width = 8, height=4)
+png(file.path(outdir,'classpost91_ward_rawsub3','tanglegram_pre83post91.png'),width = 8, height=4, unit='in', res=300)
 dl %>% untangle(method= "step2side") %>%
-  tanglegram(common_subtrees_color_branches=T, dLeaf=-0.05, margin_inner=10,lab.cex=0.5, highlight_distinct_edges  = FALSE)
+  tanglegram(common_subtrees_color_branches=T, dLeaf=-0.05, margin_inner=9,lab.cex=0.5, highlight_distinct_edges  = FALSE)
 dev.off()
 
 #with ARI
@@ -558,19 +559,34 @@ digitform <- function(df, cols, extradigit=0) {
   }
   return(df)
 }
+
 #Format (transpose, truncate and order col and row names) and export table to HTML format with default formatting
 tableformat <- function(df,tabname) {
   df <- digitform(df, 2:(ncol(df)))
   df[is.na(df)] <- '–' 
   n <- df[,1]
+  ycountdf <-predsmelt[!duplicated(predsmelt$ID),c('ID','ycount_full')]#Add number of years on record
+  colnames(ycountdf) <- c('ID', 'Record Length (years)')
+  df <- merge(ycountdf, df, by='ID') 
   df <- as.data.frame(t(df[,-1]))
-  stations <- data.frame(basin=substr(n,3,3),ID=as.numeric(str_extract(as.character(substr(n,3,6)), "\\-*\\d+\\.*\\d*")))
+  stations <- data.frame(basin=substr(n,3,3),ID=as.numeric(str_extract(as.character(substr(n,3,6)), "\\-*\\d+\\.*\\d*"))) #Only keep most basic ID subset
   colnames(df) <- with(stations, paste(basin,ID,sep="")) #Remove 1K and trailing letter
   metrics <-data.frame(type=substr(rownames(df),1,2), num=as.numeric(substr(rownames(df),3,5))) 
   HITo15y_format <- df[with(metrics, order(type, num)), #Order rows by metrics number
                        with(stations, order(basin,ID))] #Order columns first by basin then by numeric station ID
-  stargazer(HITo15y_format, type='html',out=tabname, summary=F,rownames=T)
+  #Re-place record length as first row
+  rec <- HITo15y_format[rownames(HITo15y_format)=='Record Length (years)',]
+  HITo15y_format <- HITo15y_format[-which(rownames(HITo15y_format)=='Record Length (years)'),]
+  HITo15y_format <- rbind(rec, HITo15y_format)
+  HITo15y_format[which(rownames(HITo15y_format) %in% HITo15ysub3$indice),'selected'] <- 'Yes'
+  
+  kable(HITo15y_format) %>%
+    kable_styling(bootstrap_options = "striped", font_size = 9) %>%
+    save_kable(tabname, self_contained=T)
 }
+
+
+
 tableformat(HITo15y_cast, tabname='HITdf_cast.doc')
 
 #########Make table reporting mean (SD) for each metric for all classes (appendix)
