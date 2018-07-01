@@ -698,7 +698,7 @@ factcol <- c(1,2,54,55,56,57,156,157,160) #Columns that should be considered as 
 rufienvsub[,factcol] <- sapply(rufienvsub[,factcol], as.factor) #Factorize 
 #hist.plots(rufienvsub[,-factcol]) #Inspect data
 logcols <- c('CatPopDen','ReaSloAvg','WsArea','WsPopDen') #Columns to be log-transformed
-rufienvsub[,logcols] <- data.trans(data.frame(rufienvsub[,logcols]), method = 'log', plot = F)
+rufienvsub[,logcols] <- data.trans(data.frame(rufienvsub[,logcols]), method = 'log', plot = T)
 sqrtcols <- c('CatAIAvg', 'CatBio14Av','CatBio17Av','CatBio19Av','CatElvMax', 'CatElvAvg','CatSloAvg','CatSloStd','CatLen_1','CatPAPer',
               'CatRoadDen','CatWatcha','CatMineDen','CatWatOcc','ReaPAPer','ReaElvAvg','WsBio14Av','WsBio17Av','WsBio19Av','WsElvMax',
               'WsElvAvg','WsEroAvg','WsSloAvg','WsSloStd','WsDen','WsRoadDen','WsWatcha','WsMineDen','WsWatOcc','WsWatSea') #Columns to be sqrt transform
@@ -709,7 +709,6 @@ rufienvsub[,sqrtcols] <- data.trans(rufienvsub[,sqrtcols], method = 'power',exp=
 # logitcols <- c('CatFLosSum_1', paste('LCSum',c(1,2,3,4,5,6,7,8,10,12,23,34,45,56,67,78,89,'10_11'),sep='_'),'CatWatExt','CatResInd','CatLakInd','WsFLosSum_1',
 #               'WsWatExt','WsResInd','WsLakInd', 'WsVegPer', 'WsAgriPer') #Columns to be logit transformed
 # rufienvsub[,logitcols] <- data.trans(rufienvsub[,logitcols], method = 'logit', plot = F)
-
 
 ###Standardization to mean of 0 and unit variance by variable
 rufienvsub_std <- rufienvsub[,-factcol]
@@ -747,7 +746,7 @@ pred_envarname3 <- c("area", ' average slope', 'catchment water extent', 'catchm
 pred_envar <- c('ReaElvAvg','WsArea','WsElvAvg','WsSloAvg','WsWatOcc','WsWatSea','WsBio10Av','WsBio11Av','WsBio12Av',
                'WsBio15Av','WsBio16Av','WsBio17Av','WsPETAvg','WsDRocAvg','WsPermAvg','WsPoroAvg','WsVegPer','WsAgriPer', 'LCSum_89','WsLakInd')
 #Get labels for variable importance plot
-pred_envarname <- c('Reach elevation', "Catchment area","Average elevation","Average slope", 
+pred_envarname <- c('Reach elevation (m)', "Catchment area (km2","Average elevation","Average slope", 
                      'Water occurrence', "Water seasonality"," Mean temp. warmest quarter", 
                      "Mean temp. coldest quarter", "Annual rainfall", " Rainfall seasonality"," Rainfall wettest quarter",
                      "Rainfall driest quarter", " Potential evapotranspiration"," Average depth to bedrock"," Average subsoil permeability", 
@@ -755,25 +754,49 @@ pred_envarname <- c('Reach elevation', "Catchment area","Average elevation","Ave
                      'Lotic index')
 pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname) #Prepare labels
 
+#Compute environmental variable statistics 
+rufienvsub_stats <- as.data.frame(t(rbind(setDT(rufienvsub[,vars])[, lapply(.SD,function(x) mean(x,na.rm=T)), .SDcols = vars],
+                                          setDT(rufienvsub[,vars])[, lapply(.SD,function(x) sd(x,na.rm=T)), .SDcols = vars])))
+colnames(rufienvsub_stats ) <- c('mean','sd')
+rufienvsub_stats$var <- rownames(rufienvsub_stats)
+
 #Format data for prediction
-networkclasspredict <- function(hydrodat, classtab, genv, netenvstd, netenv, vars, varslabel, kclass, dir) {
+networkclasspredict <- function(hydrodat, classtab, genvstd, envstats, netenv, vars, varslabel, kclass, dir) {
+  #Format data
   outdirclass <- file.path(outdir,dir)
-  gagesenvsel <- genv[genv$RGS_No %in% unique(hydrodat$ID),] #Subset gauges environmental data
+  gagesenvsel <- genvstd[genvstd$RGS_No %in% unique(hydrodat$ID),] #Subset gauges environmental data
   gagesenv_class_join  <- merge(gagesenvsel,classtab, by.x='RGS_No', by.y='ID') #Merge with class assignment df
   rownames(gagesenv_class_join) <- gagesenv_class_join$RGS_No
   gagesenv_class_join <- gagesenv_class_join[,-which(colnames(gagesenv_class_join) %in% c('RGS_No','GridID'))]  
   gagesenv_class_join$gclass <- as.factor(gagesenv_class_join$gclass) #Factorize gclass
-  rownames(netenvstd) <- netenvstd$GridID
+  rownames(netenv) <- netenv$GridID
   
   #Single tree
-  colnames(gagesenv_class_join[,c('gclass',vars)])[-1] <- paste0(colnames(gagesenv_class_join[,c('gclass',vars)])[-1],'_std')
-  gagesenv_class_join
-  cat <- rpart(gclass~., data=gagesenv_class_join[,c('gclass',vars)], method='class',control=rpart.control(minsplit=2, minbucket=2, cp=0.025))
+  gagesenv_class_single <- gagesenv_class_join[,c('gclass',vars)]
+  names(gagesenv_class_single)[-1] <- as.character(pred_envlabel[pred_envlabel$var %in% vars,'label'])
+  envstats$var <- as.character(pred_envlabel[envstats$var %in% vars,'label'])
+  cat <- rpart(gclass~., data=gagesenv_class_single, method='class',control=rpart.control(minsplit=2, minbucket=2, cp=0.05))
   summary(cat)
-  prp(cat, col=classcol[1:kclass])
+  #Get raw variable value for each split. First destandardized, then backtransform
+  catsplits_edit <- cat$splits
+  catsplits_edit <- data.frame(var=rownames(catsplits_edit), index=catsplits_edit[,4])
+  catsplits_edit$id <- seq_along(catsplits_edit$var)
+  catsplits_edit <- merge(catsplits_edit, envstats, by='var')
+  catsplits_edit$index_cor <- with(catsplits_edit,index*sd+mean)
   
-  pdf(file.path(outdirclass,paste0(kclass,'class_predict_tree_example.pdf')),width = 6, height=4)
-  prp(cat, col=classcol[1:kclass])
+  as.character(pred_envlabel[pred_envlabel$var %in% logcols,'label'])
+  
+  catsplits_edit[catsplits_edit$var %in% as.character(pred_envlabel[pred_envlabel$var %in% logcols,'label']),'index_cor'] <- 
+    exp(catsplits_edit[catsplits_edit$var %in% as.character(pred_envlabel[pred_envlabel$var %in% logcols,'label']),'index_cor']) 
+  catsplits_edit[catsplits_edit$var %in% as.character(pred_envlabel[pred_envlabel$var %in% sqrtcols,'label']),'index_cor'] <- 
+    (catsplits_edit[catsplits_edit$var %in% as.character(pred_envlabel[pred_envlabel$var %in% sqrtcols,'label']),'index_cor'])^2 
+  
+  cat$splits[,4] <- catsplits_edit[order(catsplits_edit$id),'index_cor']
+
+  pdf(file.path(outdirclass,paste0(kclass,'class_predict_tree_example.pdf')),width = 6, height=6.5)
+  prp(cat, col=classcol[1:kclass],varlen=0, tweak=1.2,
+      nn.border.col=0,yes.text="left branches: yes", no.text="right branches: no",nn.adj=1, 
+      branch=0,ycompact=F,ycompress=T,trace=T)
   dev.off()
   #rpart.plot(cat, cex=0.8, type=3, extra=1,box.palette = classcol[rep(1, kclass)]) #To troubleshoot
   
@@ -794,10 +817,10 @@ networkclasspredict <- function(hydrodat, classtab, genv, netenvstd, netenv, var
   dev.off()
   
   #Predict and output 
-  rufi_pred <- predict.boosting(adaboost.bt, newdata=netenvstd[,vars], newmfinal=length(adaboost.bt$trees))
+  rufi_pred <- predict.boosting(adaboost.bt, newdata=netenv[,vars], newmfinal=length(adaboost.bt$trees))
   #rufi_maxprob <- adply(rufi_pred$prob, 1, max)
   #qplot(rufi_maxprob$V1)
-  rufi_pred <- data.frame(GridID=as.integer(rownames(netenvstd)),gclass=rufi_pred$class)
+  rufi_pred <- data.frame(GridID=as.integer(rownames(netenv)),gclass=rufi_pred$class)
   rufi_pred_env <- merge(rufi_pred, rufienv, by='GridID')
   
   #Identify those areas of the network where environmental variables are outside of gauges' range
@@ -832,13 +855,13 @@ networkclasspredict <- function(hydrodat, classtab, genv, netenvstd, netenv, var
   write.dbf(rufi_predsub, file.path(outdirclass, paste0(kclass,"predict_sub.dbf")))
 }
 
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_7df[1], genv=gagesenv_format, netenvstd=rufienvsub_std, 
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_7df[1], envstats=rufienvsub_stats, genvstd=gagesenv_format, 
                     netenv=rufienvsub, vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_rawsub3')
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_6df[1], genv=gagesenv_format, netenvstd=rufienvsub_std, 
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classsub3_ward_6df[1],envstats=rufienvsub_stats, genvstd=gagesenv_format, 
                     netenv=rufienvsub,vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_rawsub3')
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_7df[1], genv=gagesenv_format, netenvstd=rufienvsub_std, 
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_7df[1], envstats=rufienvsub_stats, genvstd=gagesenv_format, 
                     netenv=rufienvsub,vars=pred_envar, varslabel=pred_envlabel, kclass=7, dir='classo15y_ward_raw')
-networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_6df[1], genv=gagesenv_format, netenvstd=rufienvsub_std, 
+networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_6df[1], envstats=rufienvsub_stats, genvstd=gagesenv_format, 
                     netenv=rufienvsub,vars=pred_envar, varslabel=pred_envlabel, kclass=6, dir='classo15y_ward_raw')
 
 #In the end, keep classub3_ward_7df
