@@ -169,22 +169,29 @@ HITboxplot <- function(HITdf, plotname) {
   HITallbox$group2 <- as.factor(substr(HITdf$indice,2,2)) #and l, h, and a
   HITallbox$indice_sub <- substr(HITdf$indice,3,5) #and metric number
   HITallbox$indice_sub <- factor(HITallbox$indice_sub, levels = unique(HITallbox$indice_sub[order(as.numeric(as.character(HITallbox$indice_sub)))]))
+  
+  #Format panel orders and names
   HITallbox$group1 <- factor(HITallbox$group1, levels = c('m','f','d','t','r'), 
                              labels = c("Magnitude-m", "Frequency-f", "Duration-d",'Timing-t',"Rate of change-r")) 
   HITallbox$group2 <- factor(HITallbox$group2, levels = c('h','a','l'), labels=c("High flow-h",'Average flow-a',"Low flow-l"))
-  # lab <- ddply(HITallbox, .(indice),
-  #              labels=median(value)-1.58*(quantile(value,0.75,na.rm=T)-quantile(value,0.25,na.rm=T))/sqrt(length(value)),
-  #              labels2=min(value))
-  #HITallbox <-  merge(HITallbox,lab, by=c('ID','indice'))
+  
+  #Format x-labels
+  metric_breaks <- unique(HITallbox$indice_sub[order(HITallbox$indice_sub)])
+  metric_labels <- as.character(metric_breaks)
+  metric_labels[seq(2, length(unique(HITallbox$indice_sub)), by=2)] <- ""  #Show only every other metric number
+  
   HITallboxplot <-ggplot(HITallbox, aes(x=indice_sub, y=value, color=group1)) + 
     scale_y_log10(name='Metric value') +
     geom_boxplot(notch=F) +
     facet_grid(group2~group1, scales = "free", space="free_x") + 
-    scale_x_discrete(name='Metric number (Appendix 1)')+
+    scale_x_discrete(name='Hydrologic metric (refer to Appendix C for description of metrics)', 
+                     breaks= metric_breaks,
+                     labels= metric_labels)+ 
     theme_classic() +
-    theme(axis.title = element_text(size=16),
+    theme(axis.title = element_text(size=20),
           axis.text.y = element_text(size=16),
-          strip.text = element_text(size = 15.5),
+          axis.text.x = element_text(size=16),
+          strip.text = element_text(size = 15),
           legend.position='none')
   png(file.path(outdir,plotname),width=20, height=12,units='in',res=300)
   print(HITallboxplot)
@@ -207,6 +214,9 @@ sub1 <- c('dh1','dh2','dh4','dh6','dh9','dh10','dh11','dh12','dh13','dl1','dl3',
 length(sub1)
 HITo15ysub1 <- droplevels(HITo15y[!(HITo15y$indice %in% sub1),]) 
 HITcorsub1 <- cor(dcast(HITo15ysub1, ID ~ indice)[,-1],use='pairwise.complete.obs')
+length(HITcorsub1[HITcorsub1<0.5])/length(HITcorsub1)
+length(HITcorsub1[HITcorsub1>0.8])/length(HITcorsub1)
+length(HITcorsub1[HITcorsub1>0.98])
 HITcorsub1[HITcorsub1<0.99 & HITcorsub1>-0.99] <- NA
 write.csv(HITcorsub1, file.path(outdir, 'HITcorsub.csv'), row.names=T)
 
@@ -217,6 +227,9 @@ sub2 <- c('dh1','dh2','dh4','dh6','dh9','dh10','dh11','dh12','dh13','dl1','dl2',
 length(sub2)
 HITo15ysub2 <- droplevels(HITo15y[!(HITo15y$indice %in% sub2),]) 
 HITcorsub2 <- cor(dcast(HITo15ysub2, ID ~ indice)[,-1],use='pairwise.complete.obs')
+length(HITcorsub2[HITcorsub2<0.5])/length(HITcorsub2)
+length(HITcorsub2[HITcorsub2>0.8])/length(HITcorsub2)
+length(HITcorsub2[HITcorsub2>0.98])
 HITcorsub2[HITcorsub2<0.90 & HITcorsub2>-0.90] <- NA
 write.csv(HITcorsub2, file.path(outdir, 'HITcorsub.csv'), row.names=T)
 
@@ -226,6 +239,13 @@ sub3 <- c('dh1','dh2','dh3','dh4','dh5','dh6','dh8','dh9','dh10','dh11','dh12','
           'ma40','ma42','ma45','mh13','mh14','mh15','mh17','mh22','mh25','mh26','mh27','ml13','ml15','ml16','ml19','ml21','fh8')
 HITo15ysub3 <- droplevels(HITo15y[!(HITo15y$indice %in% sub3),]) 
 length(unique(HITo15ysub3$indice))
+HITcorsub3 <- cor(dcast(HITo15ysub3, ID ~ indice)[,-1],use='pairwise.complete.obs')
+#REPORT: The majority of between-metric comparisons had absolute correlation coeffcients, etc.
+length(HITcorsub3[HITcorsub3<0.5])/length(HITcorsub3)
+length(HITcorsub3[HITcorsub3>0.8])/length(HITcorsub3)
+length(HITcorsub3[HITcorsub3>0.98])
+
+
 
 #Ordinate metrics
 HITpca<- prcomp(HITdf_cast[,-1], scale=T)
@@ -244,6 +264,22 @@ text(HITpca$rotation[,3][row.names(HITpca$rotation) %in% sub3]*100,HITpca$rotati
 HITo5ysub3 <- droplevels(HITo5y[!(HITo5y$indice %in% sub3),]) 
 HITpre83sub3 <- droplevels(HITpre83[!(HITpre83$indice %in% sub3),]) 
 HITpost91sub3 <- droplevels(HITpost91[!(HITpost91$indice %in% sub3),]) 
+
+#REPORT: Compute number of metrics in each category
+length(which(substr(unique(HITo15ysub3$indice),1,1)=='m')) 
+length(which(substr(unique(HITo15ysub3$indice),1,1)=='f'))
+length(which(substr(unique(HITo15ysub3$indice),1,1)=='d'))
+length(which(substr(unique(HITo15ysub3$indice),1,1)=='t'))
+length(which(substr(unique(HITo15ysub3$indice),1,1)=='r'))
+
+length(which(substr(unique(HITo15ysub3$indice),1,2)=='ma')) 
+length(which(substr(unique(HITo15ysub3$indice),1,2)=='ml'))
+length(which(substr(unique(HITo15ysub3$indice),1,2)=='mh'))
+length(which(substr(unique(HITo15ysub3$indice),1,2)=='fl'))
+length(which(substr(unique(HITo15ysub3$indice),1,2)=='fh'))
+length(which(substr(unique(HITo15ysub3$indice),1,2)=='dl'))
+length(which(substr(unique(HITo15ysub3$indice),1,2)=='dh'))
+unique(HITo15ysub3$indice)
 
 ############################################### Classification functions ############
 #Format hydrologic metrics to use in classification and compute Gower's distance
@@ -321,17 +357,18 @@ prettydend <- function(gaugecla, dir, imgname, colorder=NULL, colors=classcol, k
   
   gaugecla_ward_name <- gaugecla
   gaugecla_ward_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward_name$labels,], 
-                                    paste(RGS_No,"-",RGS_Loc," River at ", RGS_Name,sep=""))
+                                    paste(RGS_No,"-",RGS_Loc," R. at ", RGS_Name,sep=""))
   dendname <- as.dendrogram(gaugecla_ward_name)
   
   if (is.null(colorder)) colorder = 1:kclass
   png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=300)
-  par(mar=c(3,3,0,21.5)) #bottom left top right
+  par(mar=c(2.5,1.5,0,20.2)) #bottom left top right
   dendname %>% set("branches_lwd", 2.5) %>% 
     color_branches(k=kclass, col=colors[colorder], groupLabels=T) %>% 
     #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
     color_labels(k=kclass, col=colors[colorder]) %>%
-    plot(horiz=TRUE,xlab="Gower's distance", ylab="Gauge ID - River at Location",mgp=c(1.5,0.5,0))
+    plot(horiz=TRUE,xlab="Gower's distance", ylab="",mgp=c(1.5,0.5,0))
+    title(ylab="Gauge ID - Stream gauge name (format: River at Location)", line=0)
   dev.off()
   
   return(list(classr_df, dendname))
@@ -491,7 +528,7 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
   classhydro_allfull <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmeanfull, color=factor(gclass))) + 
     geom_line(size=1, alpha=0.8) + 
     scale_color_manual(name='Hydrologic class',values=classcol[1:kclass]) +
-    scale_y_continuous(name=expression('Daily mean discharge'~(m^3/s)),expand=c(0,0),limits=c(0,NA)) + 
+    scale_y_continuous(name=expression('Daily mean discharge'~(m^{3}%.%s^{-1})),expand=c(0,0),limits=c(0,NA)) + 
     scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
     theme_classic() + 
     theme(legend.position='none',
@@ -536,8 +573,6 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
 
 hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_7df[1], dir='classo15y_ward_rawsub3', kclass=7)
 hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_6df[1], dir='classo15y_ward_rawsub3', kclass=6)
-hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_7df[1], dir='classo15y_ward_raw', kclass=7)
-hydrographplots(hydrodat = rufidat_select_o15y, classtab=classr_ward_6df[1], dir='classo15y_ward_raw', kclass=6)
 
 ######################################################## Dominant metric analysis ##############
 classHIT <- merge(HITo15y, classsub3_ward_7df[1], by="ID")
@@ -751,7 +786,7 @@ pred_envarname <- c('Reach elevation (m)', "Catchment area (km2","Average elevat
                      "Mean temp. coldest quarter", "Annual rainfall", " Rainfall seasonality"," Rainfall wettest quarter",
                      "Rainfall driest quarter", " Potential evapotranspiration"," Average depth to bedrock"," Average subsoil permeability", 
                      "Average subsoil porosity", "Vegetation % cover", "Agricultural % cover", "Urban % cover",
-                     'Lotic index')
+                     'Lake index')
 pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname) #Prepare labels
 
 #Compute environmental variable statistics 
@@ -771,7 +806,7 @@ networkclasspredict <- function(hydrodat, classtab, genvstd, envstats, netenv, v
   gagesenv_class_join$gclass <- as.factor(gagesenv_class_join$gclass) #Factorize gclass
   rownames(netenv) <- netenv$GridID
   
-  #Single tree
+  #####Single tree#####
   gagesenv_class_single <- gagesenv_class_join[,c('gclass',vars)]
   names(gagesenv_class_single)[-1] <- as.character(pred_envlabel[pred_envlabel$var %in% vars,'label'])
   envstats$var <- as.character(pred_envlabel[envstats$var %in% vars,'label'])
@@ -798,9 +833,8 @@ networkclasspredict <- function(hydrodat, classtab, genvstd, envstats, netenv, v
       nn.border.col=0,yes.text="left branches: yes", no.text="right branches: no",nn.adj=1, 
       branch=0,ycompact=F,ycompress=T,trace=T)
   dev.off()
-  #rpart.plot(cat, cex=0.8, type=3, extra=1,box.palette = classcol[rep(1, kclass)]) #To troubleshoot
-  
-  #Boosted tree
+
+  ####Boosted tree####
   adaboost.bt <- boosting(gclass~., data=gagesenv_class_join[,c('gclass',vars)], boos=TRUE, mfinal=2000,  control=rpart.control(minsplit=2, minbucket=2, cp=0.05))
   adboostprob <- data.frame(ID=row.names(gagesenv_class_join),adaboost.bt$prob)
   varimp <- data.frame(imp=adaboost.bt$imp[order(adaboost.bt$imp, decreasing = TRUE)])
@@ -808,15 +842,16 @@ networkclasspredict <- function(hydrodat, classtab, genvstd, envstats, netenv, v
   varimp <- merge(varimp, varslabel, by='var')
   pdf(file.path(outdirclass,paste0(kclass,'class_predict_imp.pdf')),width = 6, height=4)
   print(
-    ggplot(varimp[varimp$imp>0,],aes(x=reorder(label, -imp),y=imp)) + geom_bar(stat='identity') +
+    ggplot(varimp[varimp$imp>0,],aes(x=reorder(label, -imp),y=imp, fill=imp)) + geom_bar(stat='identity') +
+      scale_y_continuous(name='Relative importance (%)', expand=c(0,0))+
       theme_classic()+
-      theme(axis.text.x=element_text(angle=45, hjust=1, size=10)) + 
-      scale_y_continuous(name='Variable relative importance (%)', expand=c(0,0)) +
-      scale_x_discrete(name="Variable name")
+      theme(axis.text.x=element_text(angle=45, hjust=1, size=10),
+            axis.title.x=element_blank(),
+            legend.position='none') 
   )
   dev.off()
   
-  #Predict and output 
+  ####Predict and output####
   rufi_pred <- predict.boosting(adaboost.bt, newdata=netenv[,vars], newmfinal=length(adaboost.bt$trees))
   #rufi_maxprob <- adply(rufi_pred$prob, 1, max)
   #qplot(rufi_maxprob$V1)
