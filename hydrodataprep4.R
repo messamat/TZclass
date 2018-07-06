@@ -32,10 +32,12 @@ if (dir.exists(outdir)) {
   print(paste('Create new directory:',outdir))
   dir.create(outdir)
 }
-rufidat <- read.csv(file.path(datadir,'rufidat_all.csv'), colClasses=c('character','Date','numeric','character','character'))
+#rufidat <- read.csv(file.path(datadir,'rufidat_all.csv'), colClasses=c('character','Date','numeric','character','character'))
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
 rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
 gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
+
+
 
 ################################################
 #Infilling/Interpolate data
@@ -82,8 +84,6 @@ corrtab_p <- corrtab$P
 
 
 ########################## Interpolate data with na.interp ########################
-#Use forecast na.interp for two gages that for which interpolation didn't work well
-#Try out forecast package na.interp for seasonal series
 CustomImpute_nainterp <- function(tscast, sn, maxgap,pplot=F) {
   if (sn > 1) {
     print(colnames(tscast)[sn])
@@ -175,9 +175,9 @@ dodoprecip <- openxlsx::read.xlsx(file.path(origdatadir,"RBWB_David20180430/Dodo
 dodoprecip$Date <- gsub(" ","", dodoprecip$Date)
 dodoprecip$Date <- as.Date(as.character(dodoprecip$Date), format="%d/%m/%Y")
 dodoprecip[dodoprecip$mm==-9.9,'mm'] <- NA
-#ggplot(dodoprecip[dodoprecip$Date<'1940-01-01',], aes(x=Date, y=mm)) + geom_line() + scale_y_sqrt()
+ggplot(dodoprecip, aes(x=Date, y=mm)) + geom_line() + scale_y_sqrt()
 
-##############For 1KA41 (did not functionalize workflow to check intermediate steps)
+##############For 1KA41 (did not functionalize workflow in order to check intermediate steps)
 precip1KA41 <- merge(impute_preds[,c('Date','1KA41')], dodoprecip, by='Date')
 colnames(precip1KA41) <- c('Date','Flow','Precip')
 
@@ -207,7 +207,7 @@ for(i in 1:50) #Select the number of Fourier series by minimizing AIC
   }else {break};
 }
 kr <- KalmanSmooth(ts1KA41, bestfit$model) #Impute missing values with Kalman Smoother (from https://stats.stackexchange.com/questions/104565/how-to-use-auto-arima-to-impute-missing-values)
-id.na <- which(is.na(ts1KA41) & precip1KA41sub$gap<274) #Limit to gaps < 6 months
+id.na <- which(is.na(ts1KA41) & precip1KA41sub$gap<274) #Limit to gaps < 9 months
 pred <- ts1KA41
 for (i in id.na)
   pred[i] <- bestfit$model$Z %*% kr$smooth[i,]
