@@ -102,6 +102,7 @@ colnames(JKdat) <- c('ID','Date','Flow')
 JKdat$SYM <- 'simulated'
 JKdat$Agency <- 'JaphetKashaigili'
 
+####TUN THE FOLLOWING COMMENTED-OUT BLOCK IN ORDER TO GET DIAGNOSTIC PLOTS USED IN DATA QA/QCing####
 # for (gage in unique(rufidat_screenform$ID)) {
 #   print(gage)
 #   gname <- as.character(unique(rufidat[rufidat$Gage.ID==gage,'Station.Name']))
@@ -189,17 +190,19 @@ dm1K3A <- RBWBflow[RBWBflow$ID=='1K3A',]
 JKdat_clean <- JKdat[!is.na(JKdat$Flow),]
 #1KB27 Luipa @ Mbingu: some discontinuities in record (sudden falls) + some suddenly low values near zero (1964)
 jk1KB27 <- JKdat[JKdat$ID=='1KB27',]
-#ggplot(jk1KB27[jk1KB27$Date>'1970-01-01',], aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
-JKdat_clean <- JKdat_clean[!(JKdat_clean$ID=='1KB27' & (JKdat_clean$Date>='1963-12-01' & JKdat_clean$Date<='1964-01-31') | JKdat_clean$Flow<2),]
+ggplot(jk1KB27[jk1KB27$Date>'1970-01-01',], aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+JKdat_clean <- JKdat_clean[!(JKdat_clean$ID=='1KB27' & ((JKdat_clean$Date>='1963-12-01' & JKdat_clean$Date<='1964-01-31') | JKdat_clean$Flow<2)),]
 
 #1KB28: Kihansi @ Ludoga
 jk1KB28 <- JKdat[JKdat$ID=='1KB28',]
-#ggplot(jk1KB28, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+ggplot(jk1KB28, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 
-#BBM2: Udajaji River @ Bridge (E 0816580, N 9047210, UTM Zone N 36): not very useful, only a few sparse months of data.
+#BBM2: Udajaji River @ Bridge (E 0816580, N 9047210, UTM Zone N 36)
+#NOTE: In the current version of the classification, this station was discarded as having insufficient quality data due to a coding typo.
+#If future classifications include simulated data, re-include the full dataset for this station. 
 JKdat_clean[which(JKdat_clean$ID=='Udagaji' & !is.na(JKdat_clean$ID)),'ID'] <- 'BBM2'
 BBM2 <- JKdat_clean[JKdat_clean$ID=='BBM2',]
-#ggplot(BBM2, aes(x=Date,y=Flow)) + geom_point()
+ggplot(BBM2, aes(x=Date,y=Flow)) + geom_point()
 
 #################################Clean out obviously spurious data in cleaned out data from ZTE###########################
 rufidat_clean <- rufidat_screenform
@@ -216,7 +219,7 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA2A' & rufidat_clean$Date>
 g1KA9<-rufidat_clean[rufidat_clean$ID=='1KA9',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA9'),] 
 
-###1KA11A seems like data prior to 165 is shifted up, could either be due to change in channel morphology, rating curve, or serious change inf low, remove
+###1KA11A seems like data prior to 165 are shifted up, could either be due to change in channel morphology, rating curve, or serious change inf low, remove
 g1KA11A<-rufidat_clean[rufidat_clean$ID=='1KA11A',]
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KA11A' & rufidat_clean$Date<'1964-11-15'),] 
 
@@ -255,7 +258,7 @@ ggplot(g1KA41, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 
 ###1KA42A	KIZIGO RIVER AT CHINUGULU: Many instances of long zero flow period post 1993. Not artefacts (according to conversation with RBWB) 
 g1KA42A<-rufidat_clean[rufidat_clean$ID=='1KA42A',]
-# ggplot(g1KA42A, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
+ggplot(g1KA42A, aes(x=Date,y=Flow)) + geom_point() + scale_y_sqrt()
 rufidat_clean[rufidat_clean$ID=='1KA42A' & rufidat_clean$Flow<=0.01 & !is.na(rufidat_clean$Flow), 'Flow'] <- 0 
 
 ###1KA50B	MSWISWI AT WILIMA: according to ZTE: 'Records poor pre 1968, post 1999. Possible station moved in 1999?' consider removing pre-1968
@@ -324,20 +327,24 @@ rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB19A' & rufidat_clean$Flow
 g1KB24<- rufidat_clean[rufidat_clean$ID=='1KB24',]
 ggplot(g1KB24[g1KB24$Date>'1972-01-01' & g1KB24$Date<'1975-01-01'], aes(x=Date,y=Flow)) + geom_point()
 
-
+###1KB24A SANJE AT SANJE: Very high peak at the beginning of the record. Way outside of the rating curve's range
 rufidat_clean <- rufidat_clean[!(rufidat_clean$ID=='1KB24' & rufidat_clean$Date<'1985-01-01'& rufidat_clean$Flow>20),] 
+
+###1KB36 MGUGWE at MGUGWE
+g1KB36<- rufidat_clean[rufidat_clean$ID=='1KB36',]
+#ggplot(g1KB36, aes(x=Date,y=Flow)) + geom_point()
 
 #################################Merge datasets#############################################
 rufidat_all <- rbind(rufidat_screenform, 
                         RBWBflow[RBWBflow$ID %in% c('1KA9','1KA21A', '1KA31', '1KA39A','1KB31','1KB32'),], 
-                        JKdat[JKdat$ID %in% c('1KB27','1KB28'),])
+                        JKdat[JKdat$ID == '1KB27',]) #Does not include 1K3A, BBM2, or 1KB28
 
-rufidat_cleanall <- rbind(rufidat_clean, 
+rufidat_cleanall <- rbind(rufidat_clean[rufidat_clean$ID!='1KA66',], 
                           RBWBflow_clean[RBWBflow_clean$ID %in% c('1KA9','1KA21A', '1KA31','1KA39A','1KB31','1KB32'),], 
-                          JKdat_clean[JKdat_clean$ID %in% c('1KB27','1KB28'),])
+                          JKdat_clean[JKdat_clean$ID == '1KB27',])
 
 #################################Create dataset of deleted values###########################
-rufidat_deleted <- anti_join(rufidat_screenform[!(rufidat_screenform$ID %in% c('1KA9','1KA21A','1KA31')),], rufidat_clean, by=c("ID","Date"))
+rufidat_deleted <- anti_join(rufidat_screenform[!(rufidat_screenform$ID %in% c('1KA9','1KA21A','1KA31','1KA66')),], rufidat_clean, by=c("ID","Date"))
 RBWBflow_deleted <- anti_join(RBWBflow, RBWBflow_clean, by=c("ID","Date"))
 JKdat_deleted <- anti_join(JKdat, JKdat_clean, by=c("ID","Date"))
 rufidat_deletedall <- rbind(rufidat_deleted, RBWBflow_deleted, JKdat_deleted)
@@ -346,3 +353,24 @@ rufidat_deletedall <- rbind(rufidat_deleted, RBWBflow_deleted, JKdat_deleted)
 write.csv(rufidat_all, file.path(outdir, 'rufidat_all.csv'), row.names = F)
 write.csv(rufidat_cleanall, file.path(outdir,'rufidat_clean.csv'),row.names = F)
 write.csv(rufidat_deletedall, file.path(outdir,'rufidat_deleted.csv'),row.names = F)
+
+################################# REPORT ##########################################
+#Number of stations with some data (exlude 1KB33 as no actual data):
+unique(rufidat_cleanall[!(rufidat_cleanall$ID %in% c('1KB33','1KB27','1KB28')),'ID'])
+nrow(unique(rufidat_all[!(rufidat_all$ID %in% c('1KB33','1KB27','1KB28')),'ID'])) + 1 #For 1K3A 
+#Of which 37 were kept for subsequent analysis
+# 1KB27, 1KB28, and BBM2 that were not used in the classification due to insufficient data. 
+
+#Total number of mean daily discharge records pre-cleaning
+precleaning <- nrow(unique(as.data.frame(rufidat_all)[!(rufidat_all$ID %in% c('1KB33','1KB27','1KB28')),c('ID','Date')])) + nrow(dm1K3A)
+precleaning
+
+#Number of stations for which new rating curves were developed
+unique(rufidat_all[,c('ID','Agency')])
+nrow(unique(rufidat_cleanall[rufidat_cleanall$Agency=='New','ID'])) 
+nrow(unique(rufidat_all[rufidat_all$Agency %in% c('RBWB_DavidMunkyala','RBWB',''),'ID']))
+
+#Number of deleted records
+postcleaning <- nrow(unique(as.data.frame(rufidat_cleanall)[!(rufidat_cleanall$ID %in% c('1KB33','1KB27','1KB28')),c('ID','Date')]))
+(precleaning-postcleaning)/precleaning
+
