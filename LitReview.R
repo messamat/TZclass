@@ -94,7 +94,7 @@ b<-ggplot(hydro.sub, aes(Membership)) + geom_bar(aes(y=(..count..)/sum(..count..
 
 # HydroDataType
 hydro.sub2<-hydro.sub[!is.na(hydro.sub$HydroDataType),] # omitting rows with NAs
-hydro.sub$HydroDataType <- factor(hydro.sub$HydroDataType , levels = c('Observed','Modeled','Obs/Mod'), labels = c('Observed', 'Modeled', 'Mixed'))
+hydro.sub2$HydroDataType <- factor(hydro.sub2$HydroDataType , levels = c('Observed','Modeled','Obs/Mod'), labels = c('Observed', 'Modeled', 'Mixed'))
 c<-ggplot(hydro.sub2, aes(HydroDataType)) + geom_bar(aes(y=(..count..)/sum(..count..)*100),fill='darkblue') + ylab("% studies") +
   scale_y_continuous(expand=c(0,0),limits=c(0,100),breaks=seq(0, 100, by=10)) + ggtitle("(c) Hydrologic Data") +
   theme (
@@ -110,7 +110,7 @@ c<-ggplot(hydro.sub2, aes(HydroDataType)) + geom_bar(aes(y=(..count..)/sum(..cou
 
 # TemporalGrain
 hydro.sub2<-hydro.sub[!is.na(hydro.sub$TemporalGrain),] # omitting rows with NAs
-hydro.sub$TemporalGrain <- factor(hydro.sub$TemporalGrain , levels = c('Annual','Monthly','Daily','Hourly'))
+hydro.sub2$TemporalGrain <- factor(hydro.sub2$TemporalGrain , levels = c('Annual','Monthly','Daily','Hourly'))
 d<-ggplot(hydro.sub2, aes(TemporalGrain)) + geom_bar(aes(y=(..count..)/sum(..count..)*100),fill='darkblue') + ylab("% studies") +
   scale_y_continuous(expand=c(0,0),limits=c(0,100),breaks=seq(0, 100, by=10)) + ggtitle("(d) Temporal Grain") +
   theme (
@@ -172,7 +172,7 @@ g<-ggplot(hydro.sub, aes(SpatifalExtent)) + geom_bar(aes(y=(..count..)/sum(..cou
 
 
 # FIGURE
-png(file.path(outdir,'studies_characs.png'),width = 6.5, height=7.5,units='in',res=300)
+pdf(file.path(outdir,'studies_characs.pdf'),width = 6.5, height=7.5)
 grid.draw(gtable_cbind(gtable_rbind(ggplotGrob(a), ggplotGrob(c), ggplotGrob(e)),
                        gtable_rbind(ggplotGrob(b), ggplotGrob(d), ggplotGrob(f))))
 dev.off()
