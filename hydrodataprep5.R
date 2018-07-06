@@ -163,8 +163,8 @@ record_overview_name <-ggplot(data=rufidat_cleanenv, aes(x=Date, y=label)) +
   geom_bar(data=rufidat_datesummary, aes(x=Date,y='Mgugwe R. at Mgugwe - 1KB36',color=V1), stat='identity') +
   geom_point(size=2) +
   scale_x_date(breaks=as.Date(paste(c(1954,seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
-  scale_y_discrete(name='Stream gauge name (format: River at Location) - ID') + 
-  scale_colour_distiller(name='Number of stream gauges',palette='Spectral',breaks=c(5,10,15,20,25,max(rufidat_datesummary$V1)),
+  scale_y_discrete(name='Stream gauge name (format: River at Location - ID)') + 
+  scale_colour_distiller(name='No. of stream gauges',palette='Spectral',breaks=c(5,10,15,20,25,max(rufidat_datesummary$V1)),
                          limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
   theme_classic() +
   theme(text=element_text(size=20),
@@ -172,7 +172,7 @@ record_overview_name <-ggplot(data=rufidat_cleanenv, aes(x=Date, y=label)) +
         axis.title.y = element_text(vjust=-20),
         legend.key.size = unit(3,"line"),
         plot.margin = unit(c(0,0,0,-0.5), "cm"))
-png(file.path(outdir,'record_overview20180630_names.png'),width=20, height=12,units='in',res=300)
+png(file.path(outdir,'record_overview20180705_names.png'),width=20, height=12,units='in',res=300)
 print(record_overview_name)
 dev.off()
 
@@ -187,12 +187,13 @@ for (i in seq(0.5,0,-0.1)) {
 colnames(rufidat_gapyear) <- c('ID',paste('gagecount_gap', seq(0.5,0,-0.1),sep="_"))
 
 #Compute for a range of durations, the number of stations that have data for at least this duration, for each percentage gap threshold
-rufidat_gapplot <- ldply(seq(5,50,1), function(y) {adply(rufidat_gapyear[,2:ncol(rufidat_gapyear)], 2, function(x) length(which(x>y)))})
-rufidat_gapplot$minyr <- sort(rep(seq(5,50,1), ncol(rufidat_gapyear[,2:ncol(rufidat_gapyear)])))
+rufidat_gapplot <- ldply(seq(1,50,1), function(y) {
+  adply(rufidat_gapyear[,2:ncol(rufidat_gapyear)], 2, function(x) length(which(x>y)))})
+rufidat_gapplot$minyr <- sort(rep(seq(1,50,1), ncol(rufidat_gapyear[,2:ncol(rufidat_gapyear)])))
 rufidat_gapplot$threshgap <- as.numeric(substr(rufidat_gapplot$X1,15,18))
 
 gapplot <- ggplot(rufidat_gapplot, aes(x=minyr, y=V1, color=as.factor(100-100*threshgap))) + 
-  scale_x_continuous(name='Record length (years)', breaks=seq(5,60,5), expand=c(0,0)) +
+  scale_x_continuous(name='Record length (years)', breaks=c(1,seq(5,60,5)), expand=c(0,0)) +
   scale_y_continuous(name='Number of stream gauges', limits=c(0,40), breaks=seq(0,40,5),expand=c(0,0))+
   scale_color_discrete(name="Minimum yearly record completeness (% of days)") +
   guides(color=guide_legend(ncol=4)) +
@@ -207,9 +208,13 @@ gapplot <- ggplot(rufidat_gapplot, aes(x=minyr, y=V1, color=as.factor(100-100*th
         axis.line = element_line(colour = 'black'),
         panel.border = element_blank(),
         plot.margin = unit(c(0.5,0.5,0.5,0.5), "cm"))
-png(file.path(outdir,'gapplot20180630.png'),width = 12, height=12,units='in',res=300)
+png(file.path(outdir,'gapplot20180703.png'),width = 12, height=12,units='in',res=300)
 print(gapplot)
 dev.off()
+
+############REPORT
+rufidat_gapplot[rufidat_gapplot$minyr==15 & rufidat_gapplot$threshgap==0,]
+rufidat_gapplot[rufidat_gapplot$minyr==15 & rufidat_gapplot$threshgap==0.5,]
 
 ##################################################Overlapplot############
 #Now compute the number of gages as a function of record length and record overlap given that we only keep years with less than 10% of missing data
@@ -270,6 +275,8 @@ print(tryoverlap)
 #####################################################################
 #Compute number of years of data for later subsetting of gages 
 #####################################################################
+#All
+ycount_all <-  rufidat_gapsummary[,length(unique(hyear)),.(ID)]
 #< 10% missing data, full length of record
 ycount_full <- rufidat_gapsummary[gap_per<=0.1 & max_gap<37,length(unique(hyear)),.(ID)]
 #< 10% missing data, pre-1983
@@ -408,14 +415,21 @@ for (g in unique(predsmelt$ID)) {
 mean(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
 min(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
 max(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
-"On average, gauges contained 39 years of daily discharge data (min = 2 years, max = 64 years)"
+"On average, gauges contained 40 years of daily discharge data (min = 2 years, max = 64 years)"
+
+#Compare discharge record for Ruaha and Kilombero
+kilombero_avg <- mean(setDT(rufidat_gapsummary)[substr(ID,1,3)=='1KB',length(hyear),ID]$V1)
+ruaha_avg <- mean(setDT(rufidat_gapsummary)[substr(ID,1,3)=='1KA',length(hyear),ID]$V1)
+ruaha_avg-kilombero_avg
+#the discharge records of stream gauges in the Kilombero River Basin were 16 years shorter than those in the Great Ruaha River Basin, on average 
 
 mean(rufidat_gapsummary$gap_per)
 min(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
 max(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
-"The average percentage of missing data per year across all gauges was 14% (min=1%, max=59%)." 
+"The average percentage of missing data per year across all gauges was 15% (min=1%, max=59%)." 
 
-mean(rufidat_select_o15y$ycount_full)
+#Mean number of years with 90% completeness and 37 max gap criterion
+mean(ycount_full$V1)
 
 #####################################################################
 #Assess representativity of gages regarding environmental variables
@@ -450,10 +464,10 @@ envplot <- function(selected_gages, plotname) {
   gagesenvrec[!(gagesenvrec$RGS_No %in% unique(selected_gages$ID)),'select'] <- 'N'
   
   selRGB <- rgb(168,0,0,maxColorValue = 255)
-  notselRGB <- rgb(104,104,104, maxColorValue = 255)
+  notselRGB <- rgb(150,150,150, maxColorValue = 255)
   
   envplot_area <- ggplot(rufienv, aes(x=WsArea)) + 
-    geom_vline(data=gagesenvrec, aes(xintercept=WsArea, color=select),alpha=0.5, size=0.75) +
+    geom_vline(data=gagesenvrec, aes(xintercept=WsArea, color=select),alpha=0.75, size=0.75) +
     geom_histogram(bins=50, fill='#878787', alpha=0.5) + 
     scale_x_log10(name=expression('Catchment area'~(km^2)),
                   breaks = c(1,10,100,1000,10000,100000),
@@ -465,7 +479,7 @@ envplot <- function(selected_gages, plotname) {
     labs(subtitle = "(a)")
   #envplot_area
   envplot_elv <- ggplot(rufienv, aes(x=ReaElvAvg)) +
-    geom_vline(data=gagesenvrec, aes(xintercept=ReaElvAvg, color=select),alpha=0.5, size=0.75) +
+    geom_vline(data=gagesenvrec, aes(xintercept=ReaElvAvg, color=select),alpha=0.75, size=0.75) +
     geom_histogram(bins=50,fill='#fdbf6f', alpha=0.65) + 
     scale_x_continuous(name=expression('River reach average elevation (m)'),
                        expand=c(0,0)) +
@@ -475,7 +489,7 @@ envplot <- function(selected_gages, plotname) {
     labs(subtitle = "(b)")
   #envplot_elv
   envplot_preci <- ggplot(rufienv, aes(x=WsBio12Av)) + 
-    geom_vline(data=gagesenvrec, aes(xintercept=WsBio12Av, color=select),alpha=0.5, size=0.75) +
+    geom_vline(data=gagesenvrec, aes(xintercept=WsBio12Av, color=select),alpha=0.75, size=0.75) +
     geom_histogram(bins=50,fill='#1f78b4', alpha=0.4) + 
     scale_x_continuous(name=expression('Catchment mean annual precipitation (mm)'),
                        expand=c(0,0)) +
@@ -488,7 +502,7 @@ envplot <- function(selected_gages, plotname) {
   
   
   envplot_watext <- ggplot(rufienv, aes(x=100*CatWatExt)) + 
-    geom_vline(data=gagesenvrec, aes(xintercept=100*CatWatExt, color=select),alpha=0.5, size=0.75) +
+    geom_vline(data=gagesenvrec, aes(xintercept=100*CatWatExt, color=select),alpha=0.75, size=0.75) +
     geom_histogram(bins=50,fill='#35978f', alpha=0.4) + 
     scale_x_continuous(name=expression('Subcatchment maximum water extent 1984-2015 (% area)'),
                        expand=c(0,0)) +
@@ -510,9 +524,9 @@ envplot <- function(selected_gages, plotname) {
     labs(subtitle = "(e)")
   #envplot_geol
   envplot_pop <- ggplot(rufienv, aes(x=CatPopDen)) + 
-    geom_vline(data=gagesenvrec, aes(xintercept=CatPopDen, color=select),alpha=0.5, size=0.75) +
+    geom_vline(data=gagesenvrec, aes(xintercept=CatPopDen, color=select),alpha=0.75, size=0.75) +
     geom_histogram(bins=50,fill='#4d9221', alpha=0.4) + 
-    scale_x_log10(name=expression('Subcatchment population density'~(persons.km^-2)),
+    scale_x_log10(name=expression('Subcatchment population density'~(persons~km^-2)),
                   breaks=c(1,5,10,50,100,1000),
                   expand=c(0,0)) +
     scale_y_continuous(name='Number of stream reaches',expand=c(0,0)) + 
@@ -523,7 +537,7 @@ envplot <- function(selected_gages, plotname) {
   
   
   envplot_forlos <- ggplot(rufienv, aes(x=100*WsFLosSum_1)) + 
-    geom_vline(data=gagesenvrec, aes(xintercept=100*WsFLosSum_1, color=select),alpha=0.5, size=0.75) +
+    geom_vline(data=gagesenvrec, aes(xintercept=100*WsFLosSum_1, color=select),alpha=0.75, size=0.75) +
     geom_histogram(bins=50,fill='#bf812d', alpha=0.6) + 
     scale_x_sqrt(name=expression('Catchment forest cover loss 2000-2016 (% area)'),
                  breaks=c(0,1,5,10,25,50,75,100),
@@ -535,7 +549,7 @@ envplot <- function(selected_gages, plotname) {
     labs(subtitle = "(g)")
   #envplot_forlos
   envplot_urb <- ggplot(rufienv, aes(x=100*LCSum_89)) + 
-    geom_vline(data=gagesenvrec, aes(xintercept=100*LCSum_89, color=select),alpha=0.5, size=0.75) +
+    geom_vline(data=gagesenvrec, aes(xintercept=100*LCSum_89, color=select),alpha=0.75, size=0.75) +
     geom_histogram(bins=50,fill='#cab2d6', alpha=0.4) + 
     scale_x_continuous(trans='log10',
                        name='Catchment urban cover (% area)',
@@ -548,7 +562,7 @@ envplot <- function(selected_gages, plotname) {
     labs(subtitle = "(h)")
   #envplot_urb
   envplot_resind <- ggplot(rufienv, aes(x=100*WsResInd)) + 
-    geom_vline(data=gagesenvrec, aes(xintercept=100*WsResInd, color=select),alpha=0.5, size=0.75) +
+    geom_vline(data=gagesenvrec, aes(xintercept=100*WsResInd, color=select),alpha=0.75, size=0.75) +
     geom_histogram(bins=50,fill='#de77ae', alpha=0.4) + 
     scale_x_continuous(name=expression('Catchment draining through nearest upstream reservoir (%)'),
                        expand=c(0,0)) +
@@ -566,7 +580,7 @@ envplot <- function(selected_gages, plotname) {
   print(plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3))
   dev.off()
 }
-envplot(rufidat_select_o15y, 'gage_envo15y.png')
+envplot(rufidat_select_o15y, 'gage_envo15y_20180703.png')
 
 ##################################In multidimensional environment####################
 #Make subset of data
