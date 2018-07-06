@@ -127,15 +127,18 @@ hclus.scree <- function(x,ylabel,...){
   par(old.par)
 }
 
+
+
 cluster_diagnostic <- function(clusterres, ylabel,clusname,dendo) {
   #hclus.table(clusterres)
-  print(coef.hclust(clusterres)) #Compute agglomerative coefficient
+  #print(paste0('Agglomerative coefficient: ', coef.hclust(clusterres))) #Compute agglomerative coefficient
+  #print(paste0('Cophenetic correlation coefficient: ',cor(gowdis, cophenetic(clusterres)))) #Compute cophenetic coefficient
   #Scree plot
   pdf(file.path(outdir, paste('deductive_scree',clusname,'.pdf',sep="")), width=8, height=8)
   hclus.scree(clusterres, ylabel=ylabel, frame.plot=FALSE,cex=1, xlim=c(0,31), ylim=c(0,max(clusterres$height)+50), xaxs='i', yaxs='i') 
   dev.off()
 }
-cluster_diagnostic(tzward, ylabel="Euclidean distance",clusname="Ward's D_20180630", dendo=T)
+cluster_diagnostic(tzward, ylabel="Average within-cluster dissimilarity (Euclidean distance)",clusname="Ward's D_20180706", dendo=T)
 
 kclass=11
 classr <-cutree(tzward, k=kclass, order_clusters_as_data = T)
@@ -149,7 +152,7 @@ if (dir.exists(outdir)) {
 write.csv(classr_df, file.path(outdir,paste0(kclass,'classtab_20180701.csv')), row.names=F)
 classr_df <-read.csv(file.path(outdir,paste0(kclass,'classtab_20180701.csv')))
 
-## cut the tree into ten clusters and reconstruct the upper part of the
+## cut the tree into k clusters and reconstruct the upper part of the
 cent <- NULL
 for(k in 1:kclass){
   cent <- rbind(cent, colMeans(setDT(tzenvsub_std[,pred_envar])[classr == k, , drop = FALSE]))
@@ -163,13 +166,15 @@ png(file.path(outdir, paste('deductive_ward_dendogram_k11.png',sep="")), width=8
 dendname %>% set("branches_lwd", 1) %>% 
   #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
   #color_labels(k=kclass, col=classcol[colorder]) %>%
-  plot(horiz=TRUE,xlab="Gower's distance", ylab="",mgp=c(1.5,0.5,0))
+  plot(horiz=TRUE,xlab="Euclidean distance", ylab="",mgp=c(1.5,0.5,0))
 dev.off()
 
 
 #################### Make table ###############################
 #RE-ORDER CLASSES BASED ON TREE
-reord_k11 <- data.frame(k_orig=c(3,4,5,9,10,11,2,6,1,7,8), k_new=c(1,2,3,4,5,6,7,8,9,10,11))
+reord_k11 <- data.frame(k_orig=c(3,4,5,9,10,11,2,6,1,7,8), 
+                        #k_new=c(1,2,2,4,5,6,7,8,9,10,11), 
+                        k_label=c('A','B','B','C','D','E','F','G','H','I','J'))
 
 # classcol=c('#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99',
 #            '#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a',
@@ -177,7 +182,6 @@ reord_k11 <- data.frame(k_orig=c(3,4,5,9,10,11,2,6,1,7,8), k_new=c(1,2,3,4,5,6,7
 
 classcol=c(
   '#000000',
-  '#6a3d9a',
   '#6a3d9a',
   '#a6cee3',
   '#1f78b4',
@@ -190,26 +194,26 @@ classcol=c(
 
 classr_df_format <- merge(classr_df, reord_k11, by.x='gclass', by.y='k_orig')
 classenv <- merge(tzenv[,c('GridID',pred_envar)], classr_df_format, by="GridID")
-classenv_melt <- melt(classenv, id.vars=c('GridID','k_new'),value.name='Value')
+classenv_melt <- melt(classenv, id.vars=c('GridID','k_label'),value.name='Value')
 
 #df <- classenv_melt
 classtableformat <- function(df, tabname) {
-  classenv_stats<- setDT(df)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(variable, k_new)] #Get mean and SD of hydrologic metric for each class
-  classenv_stats <- classenv_stats[!duplicated(classenv_stats[,c('variable','k_new')]),]
-  classenv_statsmean <- as.data.frame(dcast(classenv_stats, k_new~variable, value.var='classmean'))
-  classenv_statssd <- as.data.frame(dcast(classenv_stats, k_new~variable, value.var='classsd'))
+  classenv_stats<- setDT(df)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(variable, k_label)] #Get mean and SD of hydrologic metric for each class
+  classenv_stats <- classenv_stats[!duplicated(classenv_stats[,c('variable','k_label')]),]
+  classenv_statsmean <- as.data.frame(dcast(classenv_stats, k_label~variable, value.var='classmean'))
+  classenv_statssd <- as.data.frame(dcast(classenv_stats, k_label~variable, value.var='classsd'))
   #Format digits for mean and sd
   classenv_stats_meanform <- melt(setDT(digitform(classenv_statsmean,
-                                                  cols=2:(ncol(classenv_statsmean)), extradigit=1)),id.vars='k_new',variable.name='Variable', value.name='classmean')
+                                                  cols=2:(ncol(classenv_statsmean)), extradigit=1)),id.vars='k_label',variable.name='Variable', value.name='classmean')
   classenv_stats_sdform <- melt(setDT(digitform(classenv_statssd,
-                                                cols=2:(ncol(classenv_statssd)), extradigit=1)),id.vars='k_new',variable.name='Variable', value.name='classsd')
-  classenv_format <- merge(classenv_stats_meanform, classenv_stats_sdform, by=c('k_new','Variable'))
+                                                cols=2:(ncol(classenv_statssd)), extradigit=1)),id.vars='k_label',variable.name='Variable', value.name='classsd')
+  classenv_format <- merge(classenv_stats_meanform, classenv_stats_sdform, by=c('k_label','Variable'))
   classenv_format$tabcol <- with(classenv_format, paste0(classmean,' (',classsd,')'))
   
   classenv_format[is.na(classenv_format$classsd),'tabcol']  <- '–'
   classenv_format <- merge(as.data.frame(classenv_format[!(classenv_format$Variable=='gclass'),]), pred_envlabel, by.x='Variable', by='var')
-  table <- as.data.frame(dcast(setDT(classenv_format), Variable+label~k_new, value.var='tabcol'))
-  #table <- as.data.frame(dcast(setDT(classenv_format), k_new~Variable+label, value.var='classmean'))
+  table <- as.data.frame(dcast(setDT(classenv_format), Variable+label~k_label, value.var='tabcol'))
+  #table <- as.data.frame(dcast(setDT(classenv_format), k_label~Variable+label, value.var='classmean'))
 
   kable(table) %>%
     kable_styling(bootstrap_options = "striped", font_size = 10) %>%
@@ -223,20 +227,19 @@ classtableformat <- function(df, tabname) {
     column_spec(10,color=classcol[8]) %>%
     column_spec(11,color=classcol[9]) %>%
     column_spec(12,color=classcol[10]) %>%
-    column_spec(13,color=classcol[11]) %>%
     save_kable(tabname, self_contained=T)
 }
-classtableformat(classenv_melt,tabname=file.path(outdir,'deductive_envgclass_cast_20180701.doc'))
+classtableformat(classenv_melt,tabname=file.path(outdir,'deductive_envgclass_cast_20180704.doc'))
 
 env_labels<-setNames(pred_envarname,pred_envar) #Set metrics labels
 
-setDT(classenv_melt)[,length(GridID),.(k_new)]
+setDT(classenv_melt)[,length(GridID),.(k_label)]
 
 #Boxplot of metrics for each class
 #Remove reach elevation, catchment area, water occurrence and seasonality, temp. coldest quarter, 
 excludvar <- c('ReaElvAvg','WsArea','WsWatOcc','WsWatSea','WsBio11Av','gclass')
 tz_classenvplot <-ggplot(classenv_melt[!(classenv_melt$variable %in% excludvar) & !is.na(classenv_melt$value),],
-                      aes(x=as.factor(k_new), y=value, color=as.factor(k_new))) + 
+                      aes(x=as.factor(k_label), y=value, color=as.factor(k_label))) + 
   geom_boxplot(outlier.shape = NA) +
   facet_wrap(~as.factor(variable), scales='free',ncol=5,labeller=as_labeller(env_labels))+
   scale_y_continuous(name='Metric value',expand=c(0.05,0))+
@@ -249,6 +252,6 @@ tz_classenvplot <-ggplot(classenv_melt[!(classenv_melt$variable %in% excludvar) 
         legend.position='none') 
 #dir='classo15y_ward_rawsub3'
 #outdirclass <- file.path(outdir,dir)
-png(file.path(outdir,'11class_boxplot_20180701.png'),width = 9.5, height=8.5,units='in',res=300)
+png(file.path(outdir,'11class_boxplot_20180704.png'),width = 9.5, height=8.5,units='in',res=300)
 print(tz_classenvplot)
 dev.off()
