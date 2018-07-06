@@ -84,7 +84,7 @@ predsmelt <- merge(predsmelt, rufidat_ycount, by='ID',all.x=T)
 ############################################### Select subset of data ##############################################
 ##At least 15 years, < 10% missing data, full length of record
 ##Include 1KB32 even if only 14 years of data + Kisigo stations but skip 1KB28 with simulated data
-rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & predsmelt$ID !='1KB28' & 
+rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear<2017 & !(predsmelt$ID %in% c('1KB28','BBM2')) & 
                                    (predsmelt$ycount_full>=15 | predsmelt$ID=='1KB32') | 
                                    (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
                                    (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
@@ -184,7 +184,7 @@ HITboxplot <- function(HITdf, plotname) {
     scale_y_log10(name='Metric value') +
     geom_boxplot(notch=F) +
     facet_grid(group2~group1, scales = "free", space="free_x") + 
-    scale_x_discrete(name='Hydrologic metric (refer to Appendix C for description of metrics)', 
+    scale_x_discrete(name='Hydrologic metric', 
                      breaks= metric_breaks,
                      labels= metric_labels)+ 
     theme_classic() +
@@ -244,8 +244,6 @@ HITcorsub3 <- cor(dcast(HITo15ysub3, ID ~ indice)[,-1],use='pairwise.complete.ob
 length(HITcorsub3[HITcorsub3<0.5])/length(HITcorsub3)
 length(HITcorsub3[HITcorsub3>0.8])/length(HITcorsub3)
 length(HITcorsub3[HITcorsub3>0.98])
-
-
 
 #Ordinate metrics
 HITpca<- prcomp(HITdf_cast[,-1], scale=T)
@@ -316,8 +314,8 @@ hclus.scree <- function(x,ylabel,...){
 
 cluster_diagnostic <- function(clusterres, clusname, gowdis, ylabel="Gower's distance", format='pdf') {
   #hclus.table(clusterres)
-  coef.hclust(clusterres) #Compute agglomerative coefficient
-  #cor(gowdis, cophenetic(clusterres)) #Compute cophenetic coefficient
+  print(paste0('Agglomerative coefficient: ', coef.hclust(clusterres))) #Compute agglomerative coefficient
+  print(paste0('Cophenetic correlation coefficient: ',cor(gowdis, cophenetic(clusterres)))) #Compute cophenetic coefficient
   #Plot cophenetic relationship 
   png(file.path(outdir, paste(clusname,'r6r_cophe','.png',sep="")), width=8, height=8, units='in',res=300)
   hclus.cophenetic(gowdis, clusterres) 
@@ -532,7 +530,8 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
     scale_x_date(name='Date',date_breaks = "1 month", date_labels = "%b", expand=c(0,0)) + 
     theme_classic() + 
     theme(legend.position='none',
-          text=element_text(size=18))
+          text=element_text(size=18)) +
+    labs(subtitle = "(a)")
   
   #Superimposed standardized average yearly hydrograph for each class
   classhydro_all <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmean, color=factor(gclass))) + 
@@ -561,7 +560,8 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
     theme_classic() +
     theme(strip.background = element_blank(),
           strip.text.y = element_blank(),
-          text=element_text(size=18))
+          text=element_text(size=18)) +
+    labs(subtitle = "(b)")
   
   p1 <- ggplot_gtable(ggplot_build(classhydro_allfull))
   p2 <- ggplot_gtable(ggplot_build(classhydro_facet))
@@ -669,9 +669,9 @@ classtableformat <- function(df, KWtab, tabname) {
     column_spec(8,color=classcol[7]) %>%
     save_kable(tabname, self_contained=T)
 }
-classtableformat(classHIT, KWtab=metricKW, tabname='HITgclass_cast.doc')
+classtableformat(classHIT, KWtab=metricKW, tabname='HITgclass_cast_20180704.doc')
 
-###################################### Boxplots
+######################################################## Boxplots#############################################
 #ANOSIM of classes
 #Plot subset of metrics by name for selection of illustrative ones
 # classHITplot_sub <-ggplot(setDT(classHIT)[(classHIT$indice %like% "ml"),], aes(x=as.factor(gclass), y=value, color=as.factor(gclass))) + 
@@ -790,8 +790,8 @@ pred_envarname <- c('Reach elevation (m)', "Catchment area (km2","Average elevat
 pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname) #Prepare labels
 
 #Compute environmental variable statistics 
-rufienvsub_stats <- as.data.frame(t(rbind(setDT(rufienvsub[,vars])[, lapply(.SD,function(x) mean(x,na.rm=T)), .SDcols = vars],
-                                          setDT(rufienvsub[,vars])[, lapply(.SD,function(x) sd(x,na.rm=T)), .SDcols = vars])))
+rufienvsub_stats <- as.data.frame(t(rbind(setDT(rufienvsub[,pred_envar])[, lapply(.SD,function(x) mean(x,na.rm=T)), .SDcols = pred_envar],
+                                          setDT(rufienvsub[,pred_envar])[, lapply(.SD,function(x) sd(x,na.rm=T)), .SDcols = pred_envar])))
 colnames(rufienvsub_stats ) <- c('mean','sd')
 rufienvsub_stats$var <- rownames(rufienvsub_stats)
 
@@ -905,3 +905,17 @@ networkclasspredict(hydrodat=rufidat_select_o15y, classtab=classr_ward_6df[1], e
 #adaboostcv.r7r <- boosting.cv(gclass~., data=gagesenv_class_join[,c('gclass',vars)], boos=TRUE, mfinal=1000,  
 #                              control=rpart.control(minsplit=2, minbucket=2, cp=0.05), v=14)
 #adaboostcv.r7r
+
+
+####################################### REPORT ##############################################
+#Check relationship between catchment size/stream order and record length
+gagesenv_record <- merge(gagesenv, rufidat_ycount, by.x='RGS_No', by.y='ID')
+
+ggplot(gagesenv_record, aes(x=WsArea, y=ycount_full)) + 
+  geom_point() + 
+  scale_x_log10(name='Catchment area') + 
+  labs(y='Year of data with <10% missing records')
+
+#Check difference between Great Ruaha and Kilombero
+mean(gagesenv_record[substr(gagesenv_record$RGS_No,1,3)=='1KB','ycount_full'])
+mean(gagesenv_record[substr(gagesenv_record$RGS_No,1,3)=='1KA','ycount_full'])
