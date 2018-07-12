@@ -94,6 +94,7 @@ rufidat_select_o5y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 
                                    (predsmelt$ycount_full>=5) | 
                                    (predsmelt$ID=='1KA41' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear<1996) |
                                    (predsmelt$ID=='1KA42A' & predsmelt$max_gap < 273 & predsmelt$gap_per<0.75 & predsmelt$hyear>1958 & predsmelt$hyear<2017),]
+length(unique(rufidat_select_o5y$ID))
 
 #At least 10 years of data, <10% missing data, before 1983
 rufidat_select_pre83 <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37 & predsmelt$hyear>1958 & predsmelt$hyear<=1983 & predsmelt$ID !='1KB28' & 
@@ -375,7 +376,7 @@ prettydend <- function(gaugecla, dir, imgname, colorder=NULL, colors=classcol, k
 #Define class colors
 classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614","#6baed6","#00441b") #9 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
 classcol_temporal <- c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#666666','#a65628')
-#,
+
 ######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
 ################################################ Classify based on all indices and diagnostic ############################################
 gaugegow_o15y <- HITdist(HITo15y, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
@@ -451,7 +452,7 @@ cluster_diagnostic(gaugecla_o5y_ward2sub3, "o5y Ward's D2 sub3", gaugegow_o5ysub
 
 #Make dendograms
 o5y_classsub3_ward_7df <-prettydend(gaugecla_o5y_wardsub3, dir='classo5y_ward_rawsub3',imgname='7class_dendrogram_sub3.png', kclass=7,
-                                    colorder=c(8, 2,3,5,1,7,4))
+                                    colorder=c(8, 5,1,2,3,4,7))
 o5y_classsub3_ward2_7df <-prettydend(gaugecla_o5y_ward2sub3, dir='classo5y_ward2_rawsub3',imgname='7class_dendrogram_sub3.png', kclass=7)
 o5y_classsub3_ward_8df <-prettydend(gaugecla_o5y_wardsub3, dir='classo5y_ward_rawsub3',imgname='8class_dendrogram_sub3.png', kclass=8)
 o5y_classsub3_ward2_8df <-prettydend(gaugecla_o5y_ward2sub3, dir='classo5y_ward2_rawsub3',imgname='8class_dendrogram_sub3.png', kclass=8)
@@ -686,10 +687,10 @@ classtableformat(classHIT, KWtab=metricKW, tabname='HITgclass_cast_20180704.doc'
 #         legend.position='none')
 # classHITplot_sub
 
-HITselplot <- c('ma41','ma8','ml14','mh16','fl1','fh1','dl12','dh18','tl1','th1','ra1','ra3') #Selection and ordering of hydrologic metrics
-HITselplotname <- c('Annual runoff', 'Q25/Q75','Min.flow/median flow','Q10/Q50',
-                    'Low flood pulse count', 'High flood pulse count','Annual min. 7-day flow','# of zero flow days', 
-                    'Date of annual min.','Date of annual max.','Rise rate','Fall rate') #Name for selected hydrologic metrics
+HITselplot <- c('ma41','ma15','ma22','ma7','fh1','dh15','ml19','dl18','tl1','th1','ta2','ra8') #Selection and ordering of hydrologic metrics
+HITselplotname <- c('Mean annual flow', 'Mean April flow', 'Mean November flow', 'Range in daily flow',
+                    'H. flow pulse count', 'H. flow pulse duration', 'Baseflow index 2', 'No. of zero flow days',
+                    'Date of annual min.', 'Date of annual max.', 'Predictability', 'Reversals') #Name for selected hydrologic metrics
 classHITsel <- classHIT[classHIT$indice %in% HITselplot,] #Subset metrics
 classHITsel$indice <- factor(classHITsel$indice, levels = HITselplot) #Order metrics
 HIT_labels<-setNames(paste(HITselplot,HITselplotname,sep=": "),HITselplot) #Set metrics labels
