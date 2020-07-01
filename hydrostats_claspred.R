@@ -15,7 +15,7 @@ library(plyr)
 library(dplyr)
 library(hydrostats)
 library(data.table)
-#devtools::install_github("messamat/EflowStats") #Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
+#devtools::install_github("messamat/EflowStats", INSTALL_opts=c("--no-multiarch")) #Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
 #Corrected a glitch in package, need to re-change package download to USGS-R/EflowStats
 library(EflowStats)
 library(vegan) 
@@ -39,7 +39,7 @@ library(stargazer)
 library(kableExtra)
 library(knitr)
 
-rootdir="F:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
+rootdir="D:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
 
 source(file.path(rootdir,"bin/outside_src/Biostats.R"))
 source(file.path(rootdir,"bin/outside_src/Flowscreen.hyear.internal.R"))
