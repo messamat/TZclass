@@ -194,7 +194,7 @@ HITboxplot <- function(HITdf, plotname) {
           axis.text.x = element_text(size=16),
           strip.text = element_text(size = 15),
           legend.position='none')
-  png(file.path(outdir,plotname),width=20, height=12,units='in',res=300)
+  png(file.path(outdir,plotname),width=20, height=12,units='in',res=600)
   print(HITallboxplot)
   dev.off()
 }
@@ -318,12 +318,12 @@ cluster_diagnostic <- function(clusterres, clusname, gowdis, ylabel="Gower's dis
   print(paste0('Agglomerative coefficient: ', coef.hclust(clusterres))) #Compute agglomerative coefficient
   print(paste0('Cophenetic correlation coefficient: ',cor(gowdis, cophenetic(clusterres)))) #Compute cophenetic coefficient
   #Plot cophenetic relationship 
-  png(file.path(outdir, paste(clusname,'r6r_cophe','.png',sep="")), width=8, height=8, units='in',res=300)
+  png(file.path(outdir, paste(clusname,'r6r_cophe','.png',sep="")), width=8, height=8, units='in',res=600)
   hclus.cophenetic(gowdis, clusterres) 
   dev.off()
   #Scree plot
   if (format=='png'){
-    png(file.path(outdir, paste(clusname,'r6r_scree','.png',sep="")), width=8, height=8, units='in',res=300)
+    png(file.path(outdir, paste(clusname,'r6r_scree','.png',sep="")), width=8, height=8, units='in',res=600)
   } 
   if (format=='pdf'){
     pdf(file.path(outdir, paste(clusname,'r6r_scree','.pdf',sep="")), width=8, height=8)
@@ -331,7 +331,7 @@ cluster_diagnostic <- function(clusterres, clusname, gowdis, ylabel="Gower's dis
   hclus.scree(clusterres, ylabel=ylabel, frame.plot=FALSE,cex=1, xlim=c(0,length(clusterres$height)+5), ylim=c(0,max(clusterres$height)+0.1), xaxs='i', yaxs='i') 
   dev.off()
   #Plot dendogram
-  png(file.path(outdir, paste(clusname,'r6r_dendogram','.png',sep="")), width=8, height=8, units='in',res=300)
+  png(file.path(outdir, paste(clusname,'r6r_dendogram','.png',sep="")), width=8, height=8, units='in',res=600)
   plot(clusterres, main=paste(clusname, "gauge cluster dendogram",sep=" "), xlab='Gauge ID', ylab="Gower's distance", hang=-1)   
   rect.hclust(clusterres, k=4) #Draw rectangle around k classes
   rect.hclust(clusterres, k=5) 
@@ -360,14 +360,14 @@ prettydend <- function(gaugecla, dir, imgname, colorder=NULL, colors=classcol, k
   dendname <- as.dendrogram(gaugecla_ward_name)
   
   if (is.null(colorder)) colorder = 1:kclass
-  png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=300)
+  png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=600)
   par(mar=c(2.5,1.5,0,20.2)) #bottom left top right
   dendname %>% set("branches_lwd", 2.5) %>% 
     color_branches(k=kclass, col=colors[colorder], groupLabels=T) %>% 
     #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
     color_labels(k=kclass, col=colors[colorder]) %>%
     plot(horiz=TRUE,xlab="Gower's distance", ylab="",mgp=c(1.5,0.5,0))
-    title(ylab="Gauge ID - Stream gauge name (format: River at Location)", line=0)
+    title(ylab="Station ID - River gauge name (format: River at Location)", line=0)
   dev.off()
   
   return(list(classr_df, dendname))
@@ -497,7 +497,7 @@ post91_classsub3_ward_7df <-prettydend(gaugecla_post91_wardsub3, dir='classpost9
 #Compare classifications 
 #With tanglegram (see https://cran.r-project.org/web/packages/dendextend/vignettes/introduction.html)
 dl <- dendlist(pre83_classsub3_ward_5df[2][[1]], post91_classsub3_ward_5df[2][[1]])
-png(file.path(outdir,'classpost91_ward_rawsub3','tanglegram_pre83post91.png'),width = 8, height=4, unit='in', res=300)
+png(file.path(outdir,'classpost91_ward_rawsub3','tanglegram_pre83post91.png'),width = 8, height=4, unit='in', res=600)
 dl %>% untangle(method= "step2side") %>%
   tanglegram(common_subtrees_color_branches=T, dLeaf=-0.05, margin_inner=9,lab.cex=0.5, highlight_distinct_edges  = FALSE)
 dev.off()
@@ -567,7 +567,7 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
   p1 <- ggplot_gtable(ggplot_build(classhydro_allfull))
   p2 <- ggplot_gtable(ggplot_build(classhydro_facet))
   lay= t(c(1,1,2,2))
-  png(file.path(outdirclass,paste0(kclass,'class_hydrograph.png')),width = 16, height=9,units='in',res=300)
+  png(file.path(outdirclass,paste0(kclass,'class_hydrograph.png')),width = 16, height=9,units='in',res=600)
   print(grid.arrange(p1,p2, ncol=2, layout_matrix = lay))
   dev.off()
 }
@@ -687,30 +687,52 @@ classtableformat(classHIT, KWtab=metricKW, tabname='HITgclass_cast_20180704.doc'
 #         legend.position='none')
 # classHITplot_sub
 
-HITselplot <- c('ma41','ma15','ma22','ma7','fh1','dh15','ml19','dl18','tl1','th1','ta2','ra8') #Selection and ordering of hydrologic metrics
-HITselplotname <- c('Mean annual flow', 'Mean April flow', 'Mean November flow', 'Range in daily flow',
-                    'H. flow pulse count', 'H. flow pulse duration', 'Baseflow index 2', 'No. of zero flow days',
-                    'Date of annual min.', 'Date of annual max.', 'Predictability', 'Reversals') #Name for selected hydrologic metrics
-classHITsel <- classHIT[classHIT$indice %in% HITselplot,] #Subset metrics
-classHITsel$indice <- factor(classHITsel$indice, levels = HITselplot) #Order metrics
+#HITselplot <- c('ma41','ma15','ma22','ma7','fh1','dh15','ml19','dl18','tl1','th1','ta2','ra8') #Selection and ordering of hydrologic metrics
+HITselplot <- c('ma3','ml2','ml19','mh2','fh7','dl8','dl18',
+                'dh17','dh18', 'ta2','tl2', 'th2')
+# HITselplotname <- c('Mean annual flow', 'Mean April flow', 'Mean November flow', 'Range in daily flow',
+#                     'H. flow pulse count', 'H. flow pulse duration', 'Baseflow index 2', 'No. of zero flow days',
+#                     'Date of annual min.', 'Date of annual max.', 'Predictability', 'Reversals') #Name for selected hydrologic metrics
+HITselplotname <- c('CV daily flows', #ma3
+                    'Mean min. Feb. flow', #ml2
+                    'Baseflow index 2', #ml19
+                    'Mean max. Feb. flow', #mh2
+                    'Flood frequency (> 7x median)', #fh7
+                    'CV 7-day annual min.', #dl8
+                    'Number of zero-flow days',  #dl18
+                    'High flow duration (> median)',#dh17
+                    'High flow duration (> 3x median)',#dh18
+                    'Flow predictability',#ta2
+                    'CV annual min. date', #tl22
+                    'CV annual max. date')#th2
+
+
+classHITselbox <- classHIT[classHIT$indice %in% HITselplot,] #Subset metrics
+classHITselbox$indice <- factor(classHITselbox$indice, levels = HITselplot) #Order metrics
 HIT_labels<-setNames(paste(HITselplot,HITselplotname,sep=": "),HITselplot) #Set metrics labels
+HIT_labels<-setNames(str_wrap(paste(HITselplot,HITselplotname,sep=": "),
+                              18),
+                     HITselplot) #Set metrics labels
 
 #Boxplot of metrics for each class
-classHITplot <-ggplot(classHITsel, aes(x=as.factor(gclass), y=value+0.01, color=as.factor(gclass))) + 
+classHITplot <-ggplot(classHITselbox, aes(x=as.factor(gclass), y=value+0.01, color=as.factor(gclass))) + 
   geom_boxplot(outlier.shape = NA) +
   scale_y_continuous(name='Metric value',expand=c(0.05,0)) +
   scale_x_discrete(name='Hydrologic class')+
   scale_colour_manual(values=classcol) + 
-  theme_classic() +
-  theme(axis.title = element_text(size=14),
-        axis.text.y = element_text(size=12, angle=90),
-        strip.text = element_text(size=10),
-        legend.position='none') +
-  facet_wrap(~indice, scales='free',ncol=4,labeller=as_labeller(HIT_labels)) 
+  theme_classic()  +
+  facet_wrap(~indice, scales='free',ncol=4,
+             labeller=as_labeller(HIT_labels)) +
+  theme(axis.title = element_text(size=12),
+        axis.text.y = element_text(size=11, angle=90),
+        strip.text = element_text(size=12),
+        strip.background = element_rect(color='white', fill='#f0f0f0'),
+        legend.position='none')
 
 dir='classo15y_ward_rawsub3'
 outdirclass <- file.path(outdir,dir)
-png(file.path(outdirclass,'7class_boxplot.png'),width = 8.5, height=11.5,units='in',res=300)
+png(file.path(outdirclass,'7class_boxplot.png'),
+    width = 8.5, height=11.5,units='in',res=600)
 print(classHITplot)
 dev.off()
 
