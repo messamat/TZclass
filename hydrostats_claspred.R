@@ -15,7 +15,8 @@ library(plyr)
 library(dplyr)
 library(hydrostats)
 library(data.table)
-#devtools::install_github("messamat/EflowStats") #Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
+#devtools::install_github("messamat/EflowStats", INSTALL_opts=c("--no-multiarch"))
+#Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
 #Corrected a glitch in package, need to re-change package download to USGS-R/EflowStats
 library(EflowStats)
 library(vegan) 
@@ -38,14 +39,16 @@ library(zoo)
 library(stargazer)
 library(kableExtra)
 library(knitr)
+library(rprojroot)
 
-rootdir="F:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
+rootdir <- rprojroot::find_root(rprojroot::has_dir("src"))
+resdir <- file.path(rootdir,"results")
 
 source(file.path(rootdir,"bin/outside_src/Biostats.R"))
 source(file.path(rootdir,"bin/outside_src/Flowscreen.hyear.internal.R"))
 
 #Set folder structure
-setwd(file.path(rootdir,"results")) 
+setwd(resdir) 
 datadir = file.path(getwd(),'rufiji_hydrodatafilter')
 origdatadir = file.path(rootdir,"data") 
 outdir=file.path(getwd(),'rufiji_hydrodatastats')
@@ -63,12 +66,14 @@ colnames(rufidat_impute)[seq(2,ncol(rufidat_impute),3)] <- substr(colnames(rufid
 rufidat_gapsummary <- read.csv(file.path(datadir, 'rufidat_gapsummary.csv')) #Assessment of data availability 
 rufidat_ycount<-read.csv(file.path(datadir, 'rufidat_ycount.csv')) #Number of years with >90% data for each gauge
 
-gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv')) #Import gauges' environmental data
+gagesenv <- read.csv(file.path(resdir,'gages_netjoinclean.csv')) #Import gauges' environmental data
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
-rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv')) #Import river network environmental data
+rufienv <- read.csv(file.path(resdir,'streamnet118_rufiji_finaltabclean.csv')) #Import river network environmental data
 
 #Format data for computing hydro metrics
-predsmelt <-melt(setDT(as.data.frame(rufidat_impute)[,c(1,which(colnames(rufidat_impute) %like% "^1K*"))]),id.vars = 'Date',value.name='Flow',variable.name='ID')
+predsmelt <-melt.data.table(as.data.table(as.data.frame(rufidat_impute)[,c(1,which(grepl("^1K*", colnames(rufidat_impute))))]),
+  id.vars = 'Date',value.name='Flow',variable.name='ID') %>%
+  .[, ID := gsub('^X', '', ID)]
 predsmelt <- predsmelt[,c(2,1,3)]
 predsmelt$year <- as.numeric(format(predsmelt$Date, "%Y"))
 predsmelt$month <- as.numeric(format(predsmelt$Date, "%m"))
@@ -134,6 +139,7 @@ allHITcomp <- function(dfhydro, dfenv, gageID, templateID='1KA9',hstats="all", f
   HITall_formatmelt <-melt(setDT(HITall), id.vars = "indice",variable.name = gageID) 
   HITall_formatmelt[is.infinite(HITall_formatmelt$value),'value'] <- NA
   HITall_formatmelt[is.nan(HITall_formatmelt$value),'value'] <- NA
+  names(HITall_formatmelt) <- c('indice', 'ID','value')
   return(HITall_formatmelt)
 }
 
@@ -163,6 +169,7 @@ ggplot(as.data.frame(rufidat_select_o15y)[rufidat_select_o15y$ID=='1KA50B',], ae
 #1KA59:  any metric that relies on dividing by some monthly flow is NA
 #All others with mh22, mh23, mh25, and mh26 don't have flows exceeding a given factor of median flow
 
+############################## FIGURE 4-5 ######################################################
 ############################################### Box plot of metrics##############################
 HITboxplot <- function(HITdf, plotname) {
   HITallbox<- HITdf
@@ -194,7 +201,7 @@ HITboxplot <- function(HITdf, plotname) {
           axis.text.x = element_text(size=16),
           strip.text = element_text(size = 15),
           legend.position='none')
-  png(file.path(outdir,plotname),width=20, height=12,units='in',res=300)
+  png(file.path(outdir,plotname),width=20, height=12,units='in',res=600)
   print(HITallboxplot)
   dev.off()
 }
@@ -282,9 +289,9 @@ unique(HITo15ysub3$indice)
 
 ############################################### Classification functions ############
 #Format hydrologic metrics to use in classification and compute Gower's distance
-HITdist <- function(HITdf, logmetrics) { 
+HITformat <- function(HITdf, logmetrics) {
   if (logmetrics==TRUE){
-    HITdf$Value <- log(HITdf$Value+1) #log-transform metric
+    HITdf$value <- log(HITdf$value+1) #log-transform metric
   }
   HITdf_format <- dcast(HITdf, ID ~ indice)
   HITdf_format <- merge(HITdf_format, gagesenvrec[,c('RGS_No','WsArea')], by.x='ID', by.y='RGS_No')
@@ -295,6 +302,10 @@ HITdist <- function(HITdf, logmetrics) {
   row.names(HITdf_format) <- HITdf_format$ID 
   HITdf_format <- HITdf_format[,-which(colnames(HITdf_format) %in% c('ID','WsArea'))] #Get rid of non-indices columns
   HITdf_stand <- data.stand(HITdf_format[,2:(ncol(HITdf_format))],method='standardize',margin='column',plot=F) #z-standardize columnwise 
+  return(HITdf_stand)
+}
+
+HITdist <- function(HITdf_stand) { 
   gauge_gow<- gowdis(HITdf_stand, w=rep(1,ncol(HITdf_stand)), asym.bin = NULL) #Compute Gower's distance so that missing values will not be taken in account
   return(gauge_gow)
 }
@@ -313,17 +324,23 @@ hclus.scree <- function(x,ylabel,...){
 #main=paste('Scree Plot of Hierarchical Clustering ',
 #           '(',x$dist.method,', ',x$method,')',sep='')
 
+gapclusterf <- function(x, k) {
+  list(cluster=cutree(hclust(HITdist(x), method='ward.D'),
+    k)
+  )
+}
+
 cluster_diagnostic <- function(clusterres, clusname, gowdis, ylabel="Gower's distance", format='pdf') {
   #hclus.table(clusterres)
   print(paste0('Agglomerative coefficient: ', coef.hclust(clusterres))) #Compute agglomerative coefficient
   print(paste0('Cophenetic correlation coefficient: ',cor(gowdis, cophenetic(clusterres)))) #Compute cophenetic coefficient
   #Plot cophenetic relationship 
-  png(file.path(outdir, paste(clusname,'r6r_cophe','.png',sep="")), width=8, height=8, units='in',res=300)
+  png(file.path(outdir, paste(clusname,'r6r_cophe','.png',sep="")), width=8, height=8, units='in',res=600)
   hclus.cophenetic(gowdis, clusterres) 
   dev.off()
   #Scree plot
   if (format=='png'){
-    png(file.path(outdir, paste(clusname,'r6r_scree','.png',sep="")), width=8, height=8, units='in',res=300)
+    png(file.path(outdir, paste(clusname,'r6r_scree','.png',sep="")), width=8, height=8, units='in',res=600)
   } 
   if (format=='pdf'){
     pdf(file.path(outdir, paste(clusname,'r6r_scree','.pdf',sep="")), width=8, height=8)
@@ -331,7 +348,7 @@ cluster_diagnostic <- function(clusterres, clusname, gowdis, ylabel="Gower's dis
   hclus.scree(clusterres, ylabel=ylabel, frame.plot=FALSE,cex=1, xlim=c(0,length(clusterres$height)+5), ylim=c(0,max(clusterres$height)+0.1), xaxs='i', yaxs='i') 
   dev.off()
   #Plot dendogram
-  png(file.path(outdir, paste(clusname,'r6r_dendogram','.png',sep="")), width=8, height=8, units='in',res=300)
+  png(file.path(outdir, paste(clusname,'r6r_dendogram','.png',sep="")), width=8, height=8, units='in',res=600)
   plot(clusterres, main=paste(clusname, "gauge cluster dendogram",sep=" "), xlab='Gauge ID', ylab="Gower's distance", hang=-1)   
   rect.hclust(clusterres, k=4) #Draw rectangle around k classes
   rect.hclust(clusterres, k=5) 
@@ -360,14 +377,14 @@ prettydend <- function(gaugecla, dir, imgname, colorder=NULL, colors=classcol, k
   dendname <- as.dendrogram(gaugecla_ward_name)
   
   if (is.null(colorder)) colorder = 1:kclass
-  png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=300)
+  png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=600)
   par(mar=c(2.5,1.5,0,20.2)) #bottom left top right
   dendname %>% set("branches_lwd", 2.5) %>% 
     color_branches(k=kclass, col=colors[colorder], groupLabels=T) %>% 
     #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
     color_labels(k=kclass, col=colors[colorder]) %>%
     plot(horiz=TRUE,xlab="Gower's distance", ylab="",mgp=c(1.5,0.5,0))
-    title(ylab="Gauge ID - Stream gauge name (format: River at Location)", line=0)
+    title(ylab="Station ID - River gauge name (format: River at Location)", line=0)
   dev.off()
   
   return(list(classr_df, dendname))
@@ -379,7 +396,8 @@ classcol_temporal <- c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#66666
 
 ######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 15 YEARS OF DATA ################################
 ################################################ Classify based on all indices and diagnostic ############################################
-gaugegow_o15y <- HITdist(HITo15y, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
+HITo15y_formatted <- HITformat(HITo15y, logmetrics=TRUE)
+gaugegow_o15y <- HITdist(HITo15y_formatted) #Format hydro metrics and compute Gower's distance matrix
 gaugecla_ward <-hclust(gaugegow_o15y, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 gaugecla_ward2 <-hclust(gaugegow_o15y, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
 gaugecla_UPGMA <-hclust(gaugegow_o15y, method='average') #Classify using  UPGMA
@@ -402,7 +420,8 @@ classr_ward2_7df <- prettydend(gaugecla_ward2, dir='classo15y_ward2_raw',imgname
 
 ################################################ Classify based on subsetted indices and diagnostic ############################
 #Subset 1
-gaugegow_o15ysub1 <- HITdist(HITo15ysub1, logmetrics=TRUE) #Format hydro metrics and compute Gower's distance matrix
+HITo15ysub1_formatted <- HITformat(HITo15ysub1, logmetrics=TRUE)
+gaugegow_o15ysub1 <- HITdist(HITo15ysub1_formatted) #Format hydro metrics and compute Gower's distance matrix
 gaugecla_wardsub1 <-hclust(gaugegow_o15ysub1, method='ward.D') #Classify using hierarchical agglomerative using Ward's minimum variance method
 gaugecla_ward2sub1 <-hclust(gaugegow_o15ysub1, method='ward.D2') #Classify using hierarchical agglomerative using Ward's minimum variance method
 gaugecla_UPGMAsub1 <-hclust(gaugegow_o15ysub1, method='average') #Classify using UPGMA
@@ -411,20 +430,33 @@ cluster_diagnostic(gaugecla_ward2sub1, "o15y Ward's D2 sub1", gaugegow_o15ysub1)
 cluster_diagnostic(gaugecla_UPGMAsub1, "o15y UPGMA sub1", gaugegow_o15ysub1)
 
 #Subset 2
-gaugegow_o15ysub2 <- HITdist(HITo15ysub2, logmetrics=TRUE) 
+HITo15ysub2_formatted <- HITformat(HITo15ysub2, logmetrics=TRUE)
+gaugegow_o15ysub2 <- HITdist(HITo15ysub2_formatted) #Format hydro metrics and compute Gower's distance matrix
 gaugecla_wardsub2 <-hclust(gaugegow_o15ysub2, method='ward.D') 
 cluster_diagnostic(gaugecla_wardsub2, "o15y Ward's D sub2", gaugegow_o15ysub2)
 
 #Subset 3
-gaugegow_o15ysub3 <- HITdist(HITo15ysub3, logmetrics=TRUE) 
+HITo15ysub3_formatted <- HITformat(HITo15ysub3, logmetrics=TRUE)
+gaugegow_o15ysub3 <- HITdist(HITo15ysub3_formatted) #Format hydro metrics and compute Gower's distance matrix
 gaugecla_wardsub3 <-hclust(gaugegow_o15ysub3, method='ward.D') 
 gaugecla_ward2sub3 <-hclust(gaugegow_o15ysub3, method='ward.D2')
 gaugecla_UPGMAsub3 <-hclust(gaugegow_o15ysub3, method='average')
+############################## FIGURE 4-6 ######################################################
 cluster_diagnostic(gaugecla_wardsub3, "o15y Ward's D sub3", gaugegow_o15ysub3)
 cluster_diagnostic(gaugecla_ward2sub3, "o15y Ward's D2 sub3", gaugegow_o15ysub3)
 cluster_diagnostic(gaugecla_UPGMAsub3, "o15y UPGMA sub3", gaugegow_o15ysub3)
 #The only class difference is that 1KA11 changes group to be more spatially contiguous with headwater G. Ruaha. Between Ward's D and D2,
 #Difference in relateness of major groups.
+
+gapstat<- clusGap(HITo15ysub3_formatted,
+                  FUNcluster= gapclusterf, K.max=25, B=500, verbose=T,
+                  spaceH0 = 'original')
+
+maxSE(as.data.frame(gapstat$Tab)[,'gap'], as.data.frame(gapstat$Tab)[,'SE.sim'],
+      method='Tibs2001SEmax')
+plot(gapstat)
+
+hclus.cophenetic(gaugegow_o15ysub3, gaugecla_wardsub3) 
 
 #Test significance of classes (#Doesn't really work I think due to small sample size for several classes)
 # HITo15ysub3_filled <- replace.missing(HITo15ysub3, method='mean')
@@ -437,20 +469,23 @@ cluster_diagnostic(gaugecla_UPGMAsub3, "o15y UPGMA sub3", gaugegow_o15ysub3)
 # plot(clus.stab)
 # pvrect(clus.stab, alpha=0.90)
 
+############################## FIGURE 4-7 ######################################################
 #Output and make dendogram
 classsub3_ward_7df <-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='7class_dendrogram.png', kclass=7)
 classsub3_ward_6df <-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='6class_dendrogram.png', kclass=6)
 classsub3_ward2_7df <-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='7class_dendrogram.png', kclass=7)
 classsub3_ward2_6df <-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='6class_dendrogram.png', kclass=6)
 
-######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 5 YEARS OF DATA ################################
-gaugegow_o5ysub3 <- HITdist(HITo5ysub3, logmetrics=TRUE) 
+######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 5 YEARS OF DATA (ANNEX E) ################################
+HITo5ysub3_formatted <- HITformat(HITo5ysub3, logmetrics=TRUE)
+gaugegow_o5ysub3 <- HITdist(HITo5ysub3_formatted) #Format hydro metrics and compute Gower's distance matrix
 gaugecla_o5y_wardsub3 <-hclust(gaugegow_o5ysub3, method='ward.D') 
 gaugecla_o5y_ward2sub3 <-hclust(gaugegow_o5ysub3, method='ward.D2')
 cluster_diagnostic(gaugecla_o5y_wardsub3, "o5y Ward's D sub3", gaugegow_o5ysub3)
 cluster_diagnostic(gaugecla_o5y_ward2sub3, "o5y Ward's D2 sub3", gaugegow_o5ysub3)
 
-#Make dendograms
+#Make dendograms 
+##############################  FIGURE E-1 ######################################################
 o5y_classsub3_ward_7df <-prettydend(gaugecla_o5y_wardsub3, dir='classo5y_ward_rawsub3',imgname='7class_dendrogram_sub3.png', kclass=7,
                                     colorder=c(8, 5,1,2,3,4,7))
 o5y_classsub3_ward2_7df <-prettydend(gaugecla_o5y_ward2sub3, dir='classo5y_ward2_rawsub3',imgname='7class_dendrogram_sub3.png', kclass=7)
@@ -467,12 +502,14 @@ classr_o5y <-cutree(gaugecla_o5y_wardsub3, k=7, order_clusters_as_data = FALSE)
 cluster_similarity(classr_o15y, classr_o5y[which(names(classr_o5y) %in% names(classr_o15y))], similarity="rand", method='independence')
 comembership_table(classr_o15y, classr_o5y[which(names(classr_o5y) %in% names(classr_o15y))])
 
-######################################### CLASSIFICATION BASED ON DATA PRE-1983 > 10 YEARS OF DATA ################################
-gaugegow_pre83sub3 <- HITdist(HITpre83sub3, logmetrics=TRUE) 
+######################################### CLASSIFICATION BASED ON DATA PRE-1983 > 10 YEARS OF DATA (ANNEX E)################################
+HITpre83sub3_formatted <- HITformat(HITpre83sub3, logmetrics=TRUE)
+gaugegow_pre83sub3 <- HITdist(HITpre83sub3_formatted) #Format hydro metrics and compute Gower's distance matrix
 gaugecla_pre83_wardsub3 <-hclust(gaugegow_pre83sub3, method='ward.D') 
 cluster_diagnostic(gaugecla_pre83_wardsub3, "pre83 Ward's D sub3", gaugegow_pre83sub3)
 
 #Make dendograms
+##############################  FIGURE E-3 ######################################################
 pre83_classsub3_ward_5df <-prettydend(gaugecla_pre83_wardsub3, dir='classpre83_ward_rawsub3',
                                       imgname='5class_dendrogram_sub3.png', colors=classcol_temporal, kclass=5)
 pre83_classsub3_ward_6df <-prettydend(gaugecla_pre83_wardsub3, dir='classpre83_ward_rawsub3',
@@ -480,12 +517,14 @@ pre83_classsub3_ward_6df <-prettydend(gaugecla_pre83_wardsub3, dir='classpre83_w
 pre83_classsub3_ward_7df <-prettydend(gaugecla_pre83_wardsub3, dir='classpre83_ward_rawsub3',
                                       colors=classcol_temporal,imgname='7class_dendrogram_sub3.png', kclass=7)
                                   
-######################################### CLASSIFICATION BASED ON DATA POST-1991 > 10 YEARS OF DATA ################################
-gaugegow_post91sub3 <- HITdist(HITpost91sub3, logmetrics=TRUE) 
+######################################### CLASSIFICATION BASED ON DATA POST-1991 > 10 YEARS OF DATA (ANNEX E) ################################
+HITpost91sub3_formatted <- HITformat(HITpost91sub3, logmetrics=TRUE)
+gaugegow_post91sub3 <- HITdist(HITpost91sub3_formatted) #Format hydro metrics and compute Gower's distance matrix
 gaugecla_post91_wardsub3 <-hclust(gaugegow_post91sub3, method='ward.D') 
 cluster_diagnostic(gaugecla_post91_wardsub3, "post91 Ward's D sub3", gaugegow_post91sub3)
 
 #Make dendograms
+##############################  FIGURE E-4 ######################################################
 post91_classsub3_ward_5df <-prettydend(gaugecla_post91_wardsub3, dir='classpost91_ward_rawsub3',
                                        colors=classcol_temporal,imgname='5class_dendrogram_sub3.png', kclass=5)
 post91_classsub3_ward_6df <-prettydend(gaugecla_post91_wardsub3, dir='classpost91_ward_rawsub3',
@@ -495,9 +534,10 @@ post91_classsub3_ward_7df <-prettydend(gaugecla_post91_wardsub3, dir='classpost9
                                        colors=classcol_temporal,imgname='7class_dendrogram_sub3.png', kclass=7)
 
 #Compare classifications 
+##############################  FIGURE E-7 ######################################################
 #With tanglegram (see https://cran.r-project.org/web/packages/dendextend/vignettes/introduction.html)
 dl <- dendlist(pre83_classsub3_ward_5df[2][[1]], post91_classsub3_ward_5df[2][[1]])
-png(file.path(outdir,'classpost91_ward_rawsub3','tanglegram_pre83post91.png'),width = 8, height=4, unit='in', res=300)
+png(file.path(outdir,'classpost91_ward_rawsub3','tanglegram_pre83post91.png'),width = 8, height=4, unit='in', res=600)
 dl %>% untangle(method= "step2side") %>%
   tanglegram(common_subtrees_color_branches=T, dLeaf=-0.05, margin_inner=9,lab.cex=0.5, highlight_distinct_edges  = FALSE)
 dev.off()
@@ -509,6 +549,8 @@ cluster_similarity(classr_pre83, classr_post91, similarity="rand", method='indep
 comembership_table(classr_pre83, classr_post91)
 
 
+
+############################## FIGURE 4-9 ######################################################
 ######################################################## Class hydrograph plots ################
 hydrographplots <- function(hydrodat, classtab, dir, kclass) {
   outdirclass <- file.path(outdir,dir)
@@ -567,7 +609,7 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
   p1 <- ggplot_gtable(ggplot_build(classhydro_allfull))
   p2 <- ggplot_gtable(ggplot_build(classhydro_facet))
   lay= t(c(1,1,2,2))
-  png(file.path(outdirclass,paste0(kclass,'class_hydrograph.png')),width = 16, height=9,units='in',res=300)
+  png(file.path(outdirclass,paste0(kclass,'class_hydrograph.png')),width = 16, height=9,units='in',res=600)
   print(grid.arrange(p1,p2, ncol=2, layout_matrix = lay))
   dev.off()
 }
@@ -609,6 +651,7 @@ digitform <- function(df, cols, extradigit=0) {
   return(df)
 }
 
+##############################  ANNEX D ######################################################
 #Format (transpose, truncate and order col and row names) and export table to HTML format with default formatting
 tableformat <- function(df,tabname) {
   df <- digitform(df, 2:(ncol(df)))
@@ -633,11 +676,9 @@ tableformat <- function(df,tabname) {
     kable_styling(bootstrap_options = "striped", font_size = 9) %>%
     save_kable(tabname, self_contained=T)
 }
-
-
-
 tableformat(HITo15y_cast, tabname='HITdf_cast.doc')
 
+##############################  TABLE 4-2 ######################################################
 #########Make table reporting mean (SD) for each metric for all classes (appendix)
 classtableformat <- function(df, KWtab, tabname) {
   classHIT_stats<- setDT(df)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(indice, gclass)] #Get mean and SD of hydrologic metric for each class
@@ -672,7 +713,8 @@ classtableformat <- function(df, KWtab, tabname) {
 }
 classtableformat(classHIT, KWtab=metricKW, tabname='HITgclass_cast_20180704.doc')
 
-######################################################## Boxplots#############################################
+############################## FIGURE 4-10 ######################################################
+############################## Boxplots##########################################################
 #ANOSIM of classes
 #Plot subset of metrics by name for selection of illustrative ones
 # classHITplot_sub <-ggplot(setDT(classHIT)[(classHIT$indice %like% "ml"),], aes(x=as.factor(gclass), y=value, color=as.factor(gclass))) + 
@@ -687,13 +729,31 @@ classtableformat(classHIT, KWtab=metricKW, tabname='HITgclass_cast_20180704.doc'
 #         legend.position='none')
 # classHITplot_sub
 
-HITselplot <- c('ma41','ma15','ma22','ma7','fh1','dh15','ml19','dl18','tl1','th1','ta2','ra8') #Selection and ordering of hydrologic metrics
-HITselplotname <- c('Mean annual flow', 'Mean April flow', 'Mean November flow', 'Range in daily flow',
-                    'H. flow pulse count', 'H. flow pulse duration', 'Baseflow index 2', 'No. of zero flow days',
-                    'Date of annual min.', 'Date of annual max.', 'Predictability', 'Reversals') #Name for selected hydrologic metrics
+#HITselplot <- c('ma41','ma15','ma22','ma7','fh1','dh15','ml19','dl18','tl1','th1','ta2','ra8') #Selection and ordering of hydrologic metrics
+HITselplot <- c('ma3','ml2','ml19','mh2','fh7','dl8','dl18',
+                'dh17','dh18', 'ta2','tl2', 'th2')
+# HITselplotname <- c('Mean annual flow', 'Mean April flow', 'Mean November flow', 'Range in daily flow',
+#                     'H. flow pulse count', 'H. flow pulse duration', 'Baseflow index 2', 'No. of zero flow days',
+#                     'Date of annual min.', 'Date of annual max.', 'Predictability', 'Reversals') #Name for selected hydrologic metrics
+HITselplotname <- c('CV daily flows', #ma3
+                    'Mean min. Feb. flow', #ml2
+                    'Baseflow index 2', #ml19
+                    'Mean max. Feb. flow', #mh2
+                    'Flood frequency (> 7x median)', #fh7
+                    'CV 7-day annual min.', #dl8
+                    'Number of zero-flow days',  #dl18
+                    'High flow duration (> median)',#dh17
+                    'High flow duration (> 3x median)',#dh18
+                    'Flow predictability',#ta2
+                    'CV annual min. date', #tl22
+                    'CV annual max. date')#th2
+
+
 classHITsel <- classHIT[classHIT$indice %in% HITselplot,] #Subset metrics
 classHITsel$indice <- factor(classHITsel$indice, levels = HITselplot) #Order metrics
-HIT_labels<-setNames(paste(HITselplot,HITselplotname,sep=": "),HITselplot) #Set metrics labels
+HIT_labels<-setNames(str_wrap(paste(HITselplot,HITselplotname,sep=": "),
+                             15),
+                     HITselplot) #Set metrics labels
 
 #Boxplot of metrics for each class
 classHITplot <-ggplot(classHITsel, aes(x=as.factor(gclass), y=value+0.01, color=as.factor(gclass))) + 
@@ -701,16 +761,19 @@ classHITplot <-ggplot(classHITsel, aes(x=as.factor(gclass), y=value+0.01, color=
   scale_y_continuous(name='Metric value',expand=c(0.05,0)) +
   scale_x_discrete(name='Hydrologic class')+
   scale_colour_manual(values=classcol) + 
-  theme_classic() +
-  theme(axis.title = element_text(size=14),
-        axis.text.y = element_text(size=12, angle=90),
-        strip.text = element_text(size=10),
-        legend.position='none') +
-  facet_wrap(~indice, scales='free',ncol=4,labeller=as_labeller(HIT_labels)) 
+  theme_classic()  +
+  facet_wrap(~indice, scales='free',ncol=4,
+             labeller=as_labeller(HIT_labels)) +
+  theme(axis.title = element_text(size=12),
+        axis.text.y = element_text(size=11, angle=90),
+        strip.text = element_text(size=12),
+        strip.background = element_rect(color='white', fill='#f0f0f0'),
+        legend.position='none')
 
 dir='classo15y_ward_rawsub3'
 outdirclass <- file.path(outdir,dir)
-png(file.path(outdirclass,'7class_boxplot.png'),width = 8.5, height=11.5,units='in',res=300)
+png(file.path(outdirclass,'7class_boxplot.png'),
+    width = 8.5, height=11.5,units='in',res=600)
 print(classHITplot)
 dev.off()
 
@@ -841,6 +904,7 @@ networkclasspredict <- function(hydrodat, classtab, genvstd, envstats, netenv, v
   varimp <- data.frame(imp=adaboost.bt$imp[order(adaboost.bt$imp, decreasing = TRUE)])
   varimp$var <- rownames(varimp)
   varimp <- merge(varimp, varslabel, by='var')
+  ############################## FIGURE 4-11 ######################################################
   pdf(file.path(outdirclass,paste0(kclass,'class_predict_imp.pdf')),width = 6, height=4)
   print(
     ggplot(varimp[varimp$imp>0,],aes(x=reorder(label, -imp),y=imp, fill=imp)) + geom_bar(stat='identity') +

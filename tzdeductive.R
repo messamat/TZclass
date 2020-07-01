@@ -10,40 +10,17 @@
 
 #Purpose: classify Tanzanian river network using a deductive approach
 
-# library(foreign)
-# library(plyr)
-# library(dplyr)
-# library(hydrostats)
-# library(data.table)
-# #devtools::install_github("messamat/EflowStats") #Intro Vignette: https://cdn.rawgit.com/USGS-R/EflowStats/9507f714/inst/doc/intro.html
-# #Corrected a glitch in package, need to re-change package download to USGS-R/EflowStats
-# library(EflowStats)
-# library(vegan) 
-# library(pastecs)
-# library(FD)
-# library(cluster)
-# library(pvclust)
-# library(clusteval)
-# library(adabag)
-# library(rpart)
-# library(rpart.plot)
-# library(ggplot2)
-# library(grid)
-# library(gridExtra)
-# library(ggdendro)
-# library(dendextend)
-# library(dendroextras)
-
-# library(zoo)
-# library(stargazer)
-
 library(stringr)
+library(data.table)
 library(fastcluster)
 library(cluster)
 library(ggplot2)
 
-rootdir="F:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
+rootdir <- rprojroot::find_root(rprojroot::has_dir("src")) #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
 
+load(file.path(rootdir, 'results',  'TZ_deductive', 'deductworkspace.R'))
+
+rootdir <- rprojroot::find_root(rprojroot::has_dir("src")) #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
 source(file.path(rootdir,"bin/outside_src/Biostats.R"))
 #source(file.path(rootdir,"bin/outside_src/mjcgraphics.R"))
 #Set folder structure
@@ -58,7 +35,7 @@ if (dir.exists(outdir)) {
 }
 
 #Import data
-tzenv <- read.csv('streamnet118_final.csv')
+tzenv <- fread('streamnet118_final.csv')
 
 ##################### Format data ###################################
 tzenv[,'WsVegPer'] <-  with(tzenv, WsTreePer+WsShruPer+WsGrasPer) #Sum % trees, scrubs, grassland into a vegetation variable
@@ -127,8 +104,6 @@ hclus.scree <- function(x,ylabel,...){
   par(old.par)
 }
 
-
-
 cluster_diagnostic <- function(clusterres, ylabel,clusname,dendo) {
   #hclus.table(clusterres)
   #print(paste0('Agglomerative coefficient: ', coef.hclust(clusterres))) #Compute agglomerative coefficient
@@ -138,10 +113,11 @@ cluster_diagnostic <- function(clusterres, ylabel,clusname,dendo) {
   hclus.scree(clusterres, ylabel=ylabel, frame.plot=FALSE,cex=1, xlim=c(0,31), ylim=c(0,max(clusterres$height)+50), xaxs='i', yaxs='i') 
   dev.off()
 }
+############################## FIGURE 5-1 ######################################################
 cluster_diagnostic(tzward, ylabel="Average within-cluster dissimilarity (Euclidean distance)",clusname="Ward's D_20180706", dendo=T)
 
 kclass=11
-classr <-cutree(tzward, k=kclass, order_clusters_as_data = T)
+classr <-cutree(tzward, k=kclass) #, order_clusters_as_data = T)
 classr_df <- data.frame(GridID=tzenvsub_std$GridID, gclass=classr) 
 if (dir.exists(outdir)) {
   print('Directory already exists')
@@ -193,9 +169,10 @@ classcol=c(
   '#e31a1c')
 
 classr_df_format <- merge(classr_df, reord_k11, by.x='gclass', by.y='k_orig')
-classenv <- merge(tzenv[,c('GridID',pred_envar)], classr_df_format, by="GridID")
-classenv_melt <- melt(classenv, id.vars=c('GridID','k_label'),value.name='Value')
+classenv <- merge(tzenvsub_std[,c('GridID',pred_envar)], classr_df_format, by="GridID")
+classenv_melt <- data.table::melt(classenv, id.vars=c('GridID','k_label'),value.name='Value')
 
+############################## TABLE 5-1 ######################################################
 #df <- classenv_melt
 classtableformat <- function(df, tabname) {
   classenv_stats<- setDT(df)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(variable, k_label)] #Get mean and SD of hydrologic metric for each class
@@ -231,15 +208,17 @@ classtableformat <- function(df, tabname) {
 }
 classtableformat(classenv_melt,tabname=file.path(outdir,'deductive_envgclass_cast_20180704.doc'))
 
-env_labels<-setNames(pred_envarname,pred_envar) #Set metrics labels
+env_labels<-setNames(str_wrap(pred_envarname,20),
+                     pred_envar) #Set metrics labels
 
 setDT(classenv_melt)[,length(GridID),.(k_label)]
 
+############################## FIGURE 5-3 ######################################################
 #Boxplot of metrics for each class
 #Remove reach elevation, catchment area, water occurrence and seasonality, temp. coldest quarter, 
 excludvar <- c('ReaElvAvg','WsArea','WsWatOcc','WsWatSea','WsBio11Av','gclass')
-tz_classenvplot <-ggplot(classenv_melt[!(classenv_melt$variable %in% excludvar) & !is.na(classenv_melt$value),],
-                      aes(x=as.factor(k_label), y=value, color=as.factor(k_label))) + 
+tz_classenvplot <-ggplot(classenv_melt[!(classenv_melt$variable %in% excludvar) & !is.na(classenv_melt$Value),],
+                      aes(x=as.factor(k_label), y=Value, color=as.factor(k_label))) + 
   geom_boxplot(outlier.shape = NA) +
   facet_wrap(~as.factor(variable), scales='free',ncol=5,labeller=as_labeller(env_labels))+
   scale_y_continuous(name='Metric value',expand=c(0.05,0))+
@@ -249,9 +228,10 @@ tz_classenvplot <-ggplot(classenv_melt[!(classenv_melt$variable %in% excludvar) 
   theme(axis.title = element_text(size=14),
         axis.text.y = element_text(size=11, angle=90),
         strip.text = element_text(size=10),
+        strip.background = element_rect(color='white', fill='#f0f0f0'),
         legend.position='none') 
 #dir='classo15y_ward_rawsub3'
 #outdirclass <- file.path(outdir,dir)
-png(file.path(outdir,'11class_boxplot_20180704.png'),width = 9.5, height=8.5,units='in',res=300)
+png(file.path(outdir,'11class_boxplot_20200629.png'),width = 9.5, height=8.5,units='in',res=300)
 print(tz_classenvplot)
 dev.off()

@@ -12,7 +12,7 @@
 #N.B: here, filtering of gages based on environmental disturbance and non-stationarity is subsequent to analysis based on flow record length and overlap
 # in order to be as inclusive as possible.
 
-library(ggplot2)
+library(ggplot2) 
 library(data.table)
 library(FlowScreen)
 library(reshape)
@@ -22,14 +22,13 @@ library(foreign) #For impot/export of dbf
 library(scales) # to access break formatting functions
 library(grid)
 library(gridExtra) #For multi plot export
-library(cowplot) #For multi plot alignment
 library(stringr) #For string matching
 library(pastecs) #For data preparation
 library(vegan) #For data preparation
 library(FD) #For gower's dist
-library(fifer) #for stratified sampling
+#library(fifer) #for stratified sampling
 
-rootdir="F:/Tanzania/Tanzania"
+rootdir <- rprojroot::find_root(rprojroot::has_dir("src"))
 source(file.path(rootdir,"bin/outside_src/Biostats.R"))
 source(file.path(rootdir,"bin/outside_src/Flowscreen.hyear.internal.R"))
 setwd(file.path(rootdir,"results")) #UPDATE
@@ -70,18 +69,18 @@ rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses
 # rufienv[,'WsAgriPer'] <-  with(rufienv, LCSum_45+LCSum_78) #Sum % cropland and bare ground into an agriculture variable
 # rufienv[rufienv$WsVegPer>1,'WsVegPer']<- 1 #Some rounding must have led to insignificant exceedance of 1
 # rufienv[rufienv$WsAgriPerr>1,'WsAgriPer'] <- 1
-write.csv(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'),row.names=F)
+# write.csv(rufienv, file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'),row.names=F)
 rufienv <- read.csv(file.path(getwd(),'streamnet118_rufiji_finaltabclean.csv'))
 
 #Import gages environmental data
-gagesenv <- read.csv(file.path(getwd(),'gages_netjoin.csv'))
-incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
-gagesenv <- gagesenv[,incol] #Take out all 0 columns
-gagesenv[,'WsVegPer'] <-  with(gagesenv, LCSum_12+LCSum_23+LCSum_34) #Sum % trees, scrubs, grassland into a vegetation variable
-gagesenv[,'WsAgriPer'] <-  with(gagesenv, LCSum_45+LCSum_78) #Sum % cropland and bare ground into an agriculture variable
-gagesenv[gagesenv$WsVegPer>1,'WsVegPer']<- 1 #Some rounding must have led to insignificant exceedance of 1
-gagesenv[gagesenv$WsAgriPerr>1,'WsAgriPer'] <- 1
-write.csv(gagesenv, file.path(getwd(),'gages_netjoinclean.csv'),row.names=F)
+# gagesenv <- read.csv(file.path(getwd(),'gages_netjoin.csv'))
+# incol<-colnames(gagesenv)[!(colnames(gagesenv) %in% sumcol[sumcol$V1==0,'X1'])] #Take out columns with only 0 values
+# gagesenv <- gagesenv[,incol] #Take out all 0 columns
+# gagesenv[,'WsVegPer'] <-  with(gagesenv, LCSum_12+LCSum_23+LCSum_34) #Sum % trees, scrubs, grassland into a vegetation variable
+# gagesenv[,'WsAgriPer'] <-  with(gagesenv, LCSum_45+LCSum_78) #Sum % cropland and bare ground into an agriculture variable
+# gagesenv[gagesenv$WsVegPer>1,'WsVegPer']<- 1 #Some rounding must have led to insignificant exceedance of 1
+# gagesenv[gagesenv$WsAgriPerr>1,'WsAgriPer'] <- 1
+# write.csv(gagesenv, file.path(getwd(),'gages_netjoinclean.csv'),row.names=F)
 gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv'))
 gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_No', by.y='ID', all.x=F)
 #write.csv(gagesenvrec, file.path(getwd(),'maps/gageenvrec_20180515.csv'),row.names=F)
@@ -90,7 +89,12 @@ gagesenvrec <- merge(gagesenv, unique(rufidat_clean[,c('ID','SYM')]), by.x='RGS_
 impute_preds <- read.csv(file.path('rufiji_hydrodataimpute', 'rufidat_interp.csv'), colClasses=c('Date',rep(c('numeric','numeric','character'),39)))
 colnames(impute_preds)[seq(2,ncol(impute_preds),3)] <- substr(colnames(impute_preds),2,10)[seq(2,ncol(impute_preds),3)]
 
-predsmelt <-melt(setDT(as.data.frame(impute_preds)[,c(1,which(colnames(impute_preds) %like% "^1K*"))]),id.vars = 'Date',value.name='Flow',variable.name='ID')
+predsmelt <-melt.data.table(as.data.table(
+  as.data.frame(impute_preds)[,
+                              c(1,which(colnames(impute_preds) %like% "^1K*"))]),
+  id.vars = 'Date',value.name='Flow',variable.name='ID') %>%
+  .[, ID := gsub('^X', '', ID)]
+  
 predsmelt <- predsmelt[,c(2,1,3)]
 predsmelt$SYM <- NA
 predsmelt$Agency <- NA
@@ -139,44 +143,37 @@ rufidat_gapsummary <- rufidat_dt[,list(gap_d=as.numeric(format(as.Date(paste(hye
                                  ,.(ID,hyear)]
 write.csv(rufidat_gapsummary, file.path(outdir, 'rufidat_gapsummary.csv'), row.names=F)
 
-##################################Overall figure of record (record_overview)############
-# record_overview <-ggplot(data=rufidat_clean, aes(x=Date, y=ID)) +
-#   geom_point(size=2) +
-#   geom_bar(data=rufidat_datesummary, aes(x=Date,y='1KB36',color=V1), stat='identity') +
-#   geom_point(size=2) +
-#   scale_x_date(breaks=as.Date(paste(c(seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
-#   scale_y_discrete(name='Gauge ID') + 
-#   scale_colour_distiller(name='Number of gauges',palette='Spectral',breaks=c(5,10,15,20,max(rufidat_datesummary$V1)),
-#                          limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
-#   theme_classic() + 
-#   theme(text=element_text(size=24),
-#         axis.text.x = element_text(angle = 45, hjust=1))
-# png(file.path(outdir,'record_overview20180515.png'),width = 20, height=12,units='in',res=300)
-# print(record_overview)
-# dev.off()
-
+############################## FIGURE 4-3 ##############################################
+############################## Overall figure of record (record_overview)###############
 rufidat_cleanenv <- merge(rufidat_clean, gagesenv, by.x='ID', by.y='RGS_No')
 rufidat_cleanenv$label <- as.factor(paste(rufidat_cleanenv$RGS_Loc,"R. at", rufidat_cleanenv$RGS_Name,"-", rufidat_cleanenv$ID, sep=" "))
 rufidat_cleanenv$label <- factor(rufidat_cleanenv$label, levels = unique(rufidat_cleanenv$label[order(rufidat_cleanenv$Date)]))
-record_overview_name <-ggplot(data=rufidat_cleanenv, aes(x=Date, y=label)) +
-  geom_point(size=2) +
-  geom_bar(data=rufidat_datesummary, aes(x=Date,y='Mgugwe R. at Mgugwe - 1KB36',color=V1), stat='identity') +
-  geom_point(size=2) +
+rufidat_cleanenv$labelnum <-as.numeric(rufidat_cleanenv$label)
+rufidat_datesummary$label <- factor('Mgugwe R. at Mgugwe - 1KB36', levels = unique(rufidat_cleanenv$label[order(rufidat_cleanenv$Date)]))
+rufidat_datesummary$labelnum<- max(rufidat_cleanenv$labelnum)
+
+record_overview_name <- ggplot(data=rufidat_cleanenv, aes(x=Date, y=labelnum)) +
+  geom_bar(data=rufidat_datesummary, aes(color=V1), stat='identity') +
+  geom_point(data=rufidat_cleanenv, size=2) +
   scale_x_date(breaks=as.Date(paste(c(1954,seq(1955,2015,5), 2017),'-01-01',sep="")), expand=c(0,0), date_labels = "%Y") +
-  scale_y_discrete(name='Stream gauge name (format: River at Location - ID)') + 
-  scale_colour_distiller(name='No. of stream gauges',palette='Spectral',breaks=c(5,10,15,20,25,max(rufidat_datesummary$V1)),
+  scale_y_continuous(name='River gauge name (format: River at Location - ID)',
+                     breaks=1:max(rufidat_cleanenv$labelnum),
+                     labels= unique(rufidat_cleanenv[order(rufidat_cleanenv$labelnum), 'label'])) + 
+  scale_colour_distiller(name='No. of river gauges',palette='Spectral',breaks=c(5,10,15,20,25,max(rufidat_datesummary$V1)),
                          limits=c(min(rufidat_datesummary$V1),max(rufidat_datesummary$V1))) +
   theme_classic() +
+  coord_cartesian(expand=FALSE, clip='off') +
   theme(text=element_text(size=20),
         axis.text.x = element_text(angle = 45, hjust=1),
-        axis.title.y = element_text(vjust=-20),
+        axis.title.y = element_text(vjust=-10),
         legend.key.size = unit(3,"line"),
-        plot.margin = unit(c(0,0,0,-0.5), "cm"))
-png(file.path(outdir,'record_overview20180705_names.png'),width=20, height=12,units='in',res=300)
+        plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+png(file.path(outdir,'record_overview20200628_names.png'),width=20, height=12,units='in',res=600)
 print(record_overview_name)
 dev.off()
 
-##################################Gap plot################
+############################## FIGURE 4-4 ##############################################
+############################## Gap plot ################################################
 #Compute number of valid years on record depending on the percentage of missing data tolerated to consider a year valid and the corresponding
 #maximum gap.
 rufidat_gapyear <- data.frame(ID=unique(rufidat_gapsummary$ID))
@@ -194,7 +191,7 @@ rufidat_gapplot$threshgap <- as.numeric(substr(rufidat_gapplot$X1,15,18))
 
 gapplot <- ggplot(rufidat_gapplot, aes(x=minyr, y=V1, color=as.factor(100-100*threshgap))) + 
   scale_x_continuous(name='Record length (years)', breaks=c(1,seq(5,60,5)), expand=c(0,0)) +
-  scale_y_continuous(name='Number of stream gauges', limits=c(0,40), breaks=seq(0,40,5),expand=c(0,0))+
+  scale_y_continuous(name='Number of river gauges', limits=c(0,40), breaks=seq(0,40,5),expand=c(0,0))+
   scale_color_discrete(name="Minimum yearly record completeness (% of days)") +
   guides(color=guide_legend(ncol=4)) +
   geom_line(size=1.5) +
@@ -208,7 +205,7 @@ gapplot <- ggplot(rufidat_gapplot, aes(x=minyr, y=V1, color=as.factor(100-100*th
         axis.line = element_line(colour = 'black'),
         panel.border = element_blank(),
         plot.margin = unit(c(0.5,0.5,0.5,0.5), "cm"))
-png(file.path(outdir,'gapplot20180703.png'),width = 12, height=12,units='in',res=300)
+png(file.path(outdir,'gapplot20200628.png'),width = 12, height=12,units='in',res=600)
 print(gapplot)
 dev.off()
 
@@ -264,7 +261,7 @@ overlapplot_out <-ggplot(overlapplotmax[overlapplotmax$period_len %in% seq(5,35,
   theme(legend.position="bottom",
         text=element_text(size=14)) +
   guides(colour = guide_colourbar(title.position="top", title.hjust = 0.5, barwidth = 20, barheight = 4))
-png(file.path(outdir,'overlapplot.png'),width=20, height=12,units='in',res=300)
+png(file.path(outdir,'overlapplot.png'),width=20, height=12,units='in',res=600)
 reposition_legend(overlapplot_out, 'left', panel='panel-3-3')
 dev.off()
 
@@ -273,7 +270,7 @@ tryoverlap<-overlapplot[period_len>=30 & minyr>=15 & completeness>=0.25 & count>
 print(tryoverlap)
 
 #####################################################################
-#Compute number of years of data for later subsetting of gages 
+#Compute number of years of data for later subsetting of gages (USED IN FIGURE 4-1) 
 #####################################################################
 #All
 ycount_all <-  rufidat_gapsummary[,length(unique(hyear)),.(ID)]
@@ -304,7 +301,7 @@ rufidat_select_o15y <- predsmelt[predsmelt$gap_per<=0.1 & predsmelt$max_gap < 37
 
 
 #######################################################################
-#Plot clean and interpolated data
+#Plot clean and interpolated data (ANNEX B)
 #######################################################################
 ##################################Get example legend ######
 gage='1KA9'
@@ -377,7 +374,7 @@ plotseries <- function(gage){ #Make a graph of a time series highlighting delete
           )
   p <- ggplot_gtable(ggplot_build(rawsgplot))
   lay= t(c(rep(1,4),2))
-  png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 6.5, height=4.5,units='in',res=300)
+  png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 6.5, height=4.5,units='in',res=600)
   print(grid.arrange(p, legendts, ncol = 11, layout_matrix = lay))
   dev.off()
 }
@@ -395,13 +392,13 @@ plotflowscreen <- function(gage, div,thrs){ #make graphs of FlowScreen package o
     res <- metrics.all(gts,NAthresh=thrs)
     ginfo <- data.frame(StationID=genv$RGS_No, StnName=gname, ProvState='Rufiji Basin',Country='Tanzania',
                         Lat=genv$POINT_Y, Long=genv$POINT_X, Area=genv$WsArea, RHN='RBWB')
-    png(file.path(outdir,paste(gage,'screenb.png',sep="_")),width = 20, height=12,units='in',res=300)
+    png(file.path(outdir,paste(gage,'screenb.png',sep="_")),width = 20, height=12,units='in',res=600)
     screen.summary(res, type="b", StnInfo=ginfo)
     dev.off()
-    png(file.path(outdir,paste(gage,'screenl.png',sep="_")),width = 20, height=12,units='in',res=300)
+    png(file.path(outdir,paste(gage,'screenl.png',sep="_")),width = 20, height=12,units='in',res=600)
     screen.summary(res, type="l", StnInfo=ginfo)
     dev.off()
-    png(file.path(outdir,paste(gage,'screenh.png',sep="_")),width = 20, height=12,units='in',res=300)
+    png(file.path(outdir,paste(gage,'screenh.png',sep="_")),width = 20, height=12,units='in',res=600)
     screen.summary(res, type="h", StnInfo=ginfo)
     dev.off()
   })
@@ -421,7 +418,7 @@ max(setDT(rufidat_gapsummary)[,length(hyear),ID]$V1)
 kilombero_avg <- mean(setDT(rufidat_gapsummary)[substr(ID,1,3)=='1KB',length(hyear),ID]$V1)
 ruaha_avg <- mean(setDT(rufidat_gapsummary)[substr(ID,1,3)=='1KA',length(hyear),ID]$V1)
 ruaha_avg-kilombero_avg
-#the discharge records of stream gauges in the Kilombero River Basin were 16 years shorter than those in the Great Ruaha River Basin, on average 
+#the discharge records of river gauges in the Kilombero River Basin were 16 years shorter than those in the Great Ruaha River Basin, on average 
 
 mean(rufidat_gapsummary$gap_per)
 min(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
@@ -431,6 +428,7 @@ max(setDT(rufidat_gapsummary)[,mean(gap_per),ID]$V1)
 #Mean number of years with 90% completeness and 37 max gap criterion
 mean(ycount_full$V1)
 
+############################## FIGURE 4-2 ##############################
 #####################################################################
 #Assess representativity of gages regarding environmental variables
 #####################################################################
@@ -473,7 +471,7 @@ envplot <- function(selected_gages, plotname) {
                   breaks = c(1,10,100,1000,10000,100000),
                   labels = c(1,10,expression(10^2),expression(10^3),expression(10^4),expression(10^5)),
                   expand=c(0,0)) +
-    scale_y_continuous(name='Number of stream reaches', expand=c(0,0)) + 
+    scale_y_continuous(name='Number of river reaches', expand=c(0,0)) + 
     scale_color_manual(values=c(notselRGB,selRGB))+
     theme_env() + 
     labs(subtitle = "(a)")
@@ -483,7 +481,7 @@ envplot <- function(selected_gages, plotname) {
     geom_histogram(bins=50,fill='#fdbf6f', alpha=0.65) + 
     scale_x_continuous(name=expression('River reach average elevation (m)'),
                        expand=c(0,0)) +
-    scale_y_continuous(name='Number of stream reaches',expand=c(0,0)) +
+    scale_y_continuous(name='Number of river reaches',expand=c(0,0)) +
     scale_color_manual(values=c(notselRGB,selRGB))+
     theme_envnoy()+ 
     labs(subtitle = "(b)")
@@ -493,7 +491,7 @@ envplot <- function(selected_gages, plotname) {
     geom_histogram(bins=50,fill='#1f78b4', alpha=0.4) + 
     scale_x_continuous(name=expression('Catchment mean annual precipitation (mm)'),
                        expand=c(0,0)) +
-    scale_y_continuous(name='Number of stream reaches',expand=c(0,0)) + 
+    scale_y_continuous(name='Number of river reaches',expand=c(0,0)) + 
     theme(axis.title.y=element_blank()) +
     scale_color_manual(values=c(notselRGB,selRGB))+
     theme_envnoy()+ 
@@ -506,7 +504,7 @@ envplot <- function(selected_gages, plotname) {
     geom_histogram(bins=50,fill='#35978f', alpha=0.4) + 
     scale_x_continuous(name=expression('Subcatchment maximum water extent 1984-2015 (% area)'),
                        expand=c(0,0)) +
-    scale_y_continuous(trans='sqrt',name='Number of stream reaches',expand=c(0,0)) + 
+    scale_y_continuous(trans='sqrt',name='Number of river reaches',expand=c(0,0)) + 
     scale_color_manual(values=c(notselRGB,selRGB))+
     theme_env()+
     theme(axis.title.x=element_text(hjust=0.90))+ 
@@ -517,7 +515,7 @@ envplot <- function(selected_gages, plotname) {
     geom_bar(fill='#8c510a', alpha=0.4, stat='count') +
     geom_bar(data=gagesenvrec, aes(x=as.factor(CatGeolMaj), color=select),fill='white',alpha=0.4, size=0.75) +
     scale_x_discrete(name=expression('Main subcatchment lithology (GMIS number)')) +
-    scale_y_continuous(trans='log10',name='Number of stream reaches') + 
+    scale_y_continuous(trans='log10',name='Number of river reaches') + 
     scale_color_manual(values=c(notselRGB,selRGB))+
     theme_envnoy() +
     theme(axis.text.x = element_text(angle = 45, hjust=1))+ 
@@ -529,7 +527,7 @@ envplot <- function(selected_gages, plotname) {
     scale_x_log10(name=expression('Subcatchment population density'~(persons~km^-2)),
                   breaks=c(1,5,10,50,100,1000),
                   expand=c(0,0)) +
-    scale_y_continuous(name='Number of stream reaches',expand=c(0,0)) + 
+    scale_y_continuous(name='Number of river reaches',expand=c(0,0)) + 
     scale_color_manual(values=c(notselRGB,selRGB))+
     theme_envnoy()+ 
     labs(subtitle = "(f)")
@@ -542,7 +540,7 @@ envplot <- function(selected_gages, plotname) {
     scale_x_sqrt(name=expression('Catchment forest cover loss 2000-2016 (% area)'),
                  breaks=c(0,1,5,10,25,50,75,100),
                  expand=c(0,0)) +
-    scale_y_continuous(name='Number of stream reaches',expand=c(0,0)) + 
+    scale_y_continuous(name='Number of river reaches',expand=c(0,0)) + 
     scale_color_manual(values=c(notselRGB,selRGB))+
     theme_env() +
     theme(axis.title.x=element_text(hjust=1))+ 
@@ -556,7 +554,7 @@ envplot <- function(selected_gages, plotname) {
                        breaks = c(0.001,0.01,0.1,1,10),
                        labels= c(0.001,0.01,0.1,1,10),
                        expand=c(0,0)) +
-    scale_y_continuous(name='Number of stream reaches',expand=c(0,0)) + 
+    scale_y_continuous(name='Number of river reaches',expand=c(0,0)) + 
     scale_color_manual(values=c(notselRGB,selRGB))+
     theme_envnoy()+ 
     labs(subtitle = "(h)")
@@ -566,7 +564,7 @@ envplot <- function(selected_gages, plotname) {
     geom_histogram(bins=50,fill='#de77ae', alpha=0.4) + 
     scale_x_continuous(name=expression('Catchment draining through nearest upstream reservoir (%)'),
                        expand=c(0,0)) +
-    scale_y_log10(name='Number of stream reaches',expand=c(0,0),
+    scale_y_log10(name='Number of river reaches',expand=c(0,0),
                   breaks = trans_breaks("log10", function(x) 10^x),
                   labels = trans_format("log10", math_format(10^.x))) + 
     scale_color_manual(values=c(notselRGB,selRGB))+
@@ -576,85 +574,87 @@ envplot <- function(selected_gages, plotname) {
   #envplot_resind
   #plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3)
   
-  png(file.path(outdir,plotname),width=20, height=12,units='in',res=300)
-  print(plot_grid(envplot_area, envplot_elv, envplot_preci, envplot_watext, envplot_geol, envplot_pop, envplot_forlos, envplot_urb, envplot_resind, align = "v", nrow = 3))
+  png(file.path(outdir,plotname),width=20, height=12,units='in',res=600)
+  print(grid.arrange(envplot_area, envplot_elv, envplot_preci, envplot_watext,
+                     envplot_geol, envplot_pop, envplot_forlos, envplot_urb, 
+                     envplot_resind, nrow = 3))
   dev.off()
 }
-envplot(rufidat_select_o15y, 'gage_envo15y_20180703.png')
+envplot(rufidat_select_o15y, 'gage_envo15y_20200628.png')
 
-##################################In multidimensional environment####################
+##################################In multidimensional environment (never fully implemented)####################
 #Make subset of data
-colnames(rufienv)
-outcols <- c(1:4,6,7,9,45:70,92:112, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
-                                                                    'WsPAPer','WsDamDen','WsGeolMaj','WsLCMaj','ReaElvMin',
-                                                                    'ReaElvMax','SUM_LENGTH_GEO','Shape_Leng') |
-                                             !is.na(str_match(colnames(rufienv),'DirSum*'))))
-rufienvsub <- rufienv[,-outcols]
-rufienvsub$ReaDirMaj <- as.factor(rufienvsub$ReaDirMaj)
-colnames(rufienvsub)
-envsubcat <- rufienvsub[,c(1:55,157:161)]
-envsubws <-rufienvsub[,-c(1:55)]
-
-#Data transformation
-#Transform catchments
-str(envsubcat)
-colnames(envsubcat)
-factcol <- c(1,2,54,55,57)
-#hist.plots(envsubcat[,-factcol]) #Inspect data
-logcols <- c('CatPopDen','ReaSloAvg')
-envsubcat[,logcols] <- data.trans(data.frame(envsubcat[,logcols]), method = 'log', plot = F)
-asincols <- c('CatFLosSum', paste('LCSum',c(1,2,3,4,5,6,7,8,10),sep='_'),'CatWatExt','CatResInd','CatLakInd')
-envsubcat[,asincols] <- data.trans(envsubcat[,asincols], method = 'asin', plot = F)
-sqrtcols <- c('CatAIAvg', 'CatBio14Av','CatBio17Av','CatBio19Av','CatElvMax', 'CatElvAvg','CatSloAvg','CatSloStd','CatLen_1','CatPAPer',
-              'CatRoadDen','CatWatcha','CatMineDen','CatWatOcc','ReaPAPer','ReaElvAvg')
-envsubcat[,sqrtcols] <- data.trans(envsubcat[,sqrtcols], method = 'power',exp=.5, plot = F)
-#Transform watersheds
-#hist.plots(envsubws) #Inspect data
-
-#Then standardize to mean of 0 and unit variance
-envsubcat_std <- envsubcat[,-factcol]
-envsubcat_std <- cbind(data.stand(envsubcat_std, method = "standardize", margin = "column", plot = F),
-                       envsubcat[,factcol])
-#Transfer first column to row name
-rownames(envsubcat_std) <- envsubcat_std$GridID
-envsubcat_std <- envsubcat_std[,-which(colnames(envsubcat_std)=='GridID')]
-#Establish variable weights
-#envar <- colnames(rufienvsub)
-#weight_gow <- c(0.5, 0.5, 1,1,1, 0.5, 0.5, 0.2, 0.2, 0.2, 0.2, 0.2, 0.333, 0.333, 0.333)
-
-#Computer Gower's dissimilarity on full dataset
-set.seed(1)
-envsubcat_samp<-stratified(envsubcat_std, "ReaOrd", 0.1, select=NULL)
-rufi_gowdis <- gowdis(envsubcat_samp, w=rep(1,ncol(envsubcat_samp)), asym.bin = NULL)
-attributes(rufi_gowdis)
-#Convert gowdis output to matrix
-rufi_gowdis<- as.matrix(rufi_gowdis)
-#Run PCoA without a constant added using the stats package
-rufi_pcoa <- cmdscale(rufi_gowdis, k = 3, eig = T, add = F)
-#Check eigenvalues
-rufi_pcoa$eig
-rufi_pcoa$GOF
-
-#rufi_pcoa_eucldist <- vegdist(rufi_pcoa$points, method = "euclidean")
-#Shepard <- Shepard_diy(rufi_gowdis, rufi_pcoa_eucldist)
-#Calculate PC loadings using correlation analysis - misses 124 species, so not necessarily that representative
-vec_tr <- envfit(fish_pcoa,  Fish_traits_select, perm = 1000, na.rm = T)
-arrows <- as.data.frame(vec_tr$vectors$arrows)
-factors <- as.data.frame(vec_tr$vectors$factors)
-
-#Visualize scores
-pcoa_scores <- as.data.frame(fish_pcoa$points)
-pcoa_scores$spe <- rownames(pcoa_scores)
-colnames(pcoa_scores) <- c("PC1", "PC2")
-ggplot(pcoa_scores, aes(x = PC1, y = PC2, label = rownames(pcoa_scores))) + geom_label() +
-  geom_segment(data = arrows, aes(x = rep(0, 13), y = rep(0, 13), xend = Dim1 , yend = Dim2, label = rownames(arrows))) + 
-  geom_text(aes(x = Dim1, y = Dim2, label = rownames(arrows)), data = arrows, color = "red") +
-  
-  
-  ggplot(arrows) + geom_segment(aes(x = rep(0, 13), y = rep(0, 13), xend = Dim1 , yend = Dim2))
-
-###########################################
-#Extra: 
-#rufidat_overlapplot <- ldply(seq(5,50,1), function(y) {
-#  rufidat_dtgap[ID %in% as.character(rufidat_gapyear[rufidat_gapyear$gagecount_gap_0.1>y,'ID']),list(length(unique(ID)), minyr=y), .(Date)]
-#})
+# colnames(rufienv)
+# outcols <- c(1:4,6,7,9,45:70,92:112, which(colnames(rufienv) %in% c('CatFlowAcc','CatElvMin','CatDen','CatDamDen','CatFlowAcc','CatLCMaj',
+#                                                                     'WsPAPer','WsDamDen','WsGeolMaj','WsLCMaj','ReaElvMin',
+#                                                                     'ReaElvMax','SUM_LENGTH_GEO','Shape_Leng') |
+#                                              !is.na(str_match(colnames(rufienv),'DirSum*'))))
+# rufienvsub <- rufienv[,-outcols]
+# rufienvsub$ReaDirMaj <- as.factor(rufienvsub$ReaDirMaj)
+# colnames(rufienvsub)
+# envsubcat <- rufienvsub[,c(1:55,157:161)]
+# envsubws <-rufienvsub[,-c(1:55)]
+# 
+# #Data transformation
+# #Transform catchments
+# str(envsubcat)
+# colnames(envsubcat)
+# factcol <- c(1,2,54,55,57)
+# #hist.plots(envsubcat[,-factcol]) #Inspect data
+# logcols <- c('CatPopDen','ReaSloAvg')
+# envsubcat[,logcols] <- data.trans(data.frame(envsubcat[,logcols]), method = 'log', plot = F)
+# asincols <- c('CatFLosSum', paste('LCSum',c(1,2,3,4,5,6,7,8,10),sep='_'),'CatWatExt','CatResInd','CatLakInd')
+# envsubcat[,asincols] <- data.trans(envsubcat[,asincols], method = 'asin', plot = F)
+# sqrtcols <- c('CatAIAvg', 'CatBio14Av','CatBio17Av','CatBio19Av','CatElvMax', 'CatElvAvg','CatSloAvg','CatSloStd','CatLen_1','CatPAPer',
+#               'CatRoadDen','CatWatcha','CatMineDen','CatWatOcc','ReaPAPer','ReaElvAvg')
+# envsubcat[,sqrtcols] <- data.trans(envsubcat[,sqrtcols], method = 'power',exp=.5, plot = F)
+# #Transform watersheds
+# #hist.plots(envsubws) #Inspect data
+# 
+# #Then standardize to mean of 0 and unit variance
+# envsubcat_std <- envsubcat[,-factcol]
+# envsubcat_std <- cbind(data.stand(envsubcat_std, method = "standardize", margin = "column", plot = F),
+#                        envsubcat[,factcol])
+# #Transfer first column to row name
+# rownames(envsubcat_std) <- envsubcat_std$GridID
+# envsubcat_std <- envsubcat_std[,-which(colnames(envsubcat_std)=='GridID')]
+# #Establish variable weights
+# #envar <- colnames(rufienvsub)
+# #weight_gow <- c(0.5, 0.5, 1,1,1, 0.5, 0.5, 0.2, 0.2, 0.2, 0.2, 0.2, 0.333, 0.333, 0.333)
+# 
+# #Computer Gower's dissimilarity on full dataset
+# set.seed(1)
+# envsubcat_samp<-stratified(envsubcat_std, "ReaOrd", 0.1, select=NULL)
+# rufi_gowdis <- gowdis(envsubcat_samp, w=rep(1,ncol(envsubcat_samp)), asym.bin = NULL)
+# attributes(rufi_gowdis)
+# #Convert gowdis output to matrix
+# rufi_gowdis<- as.matrix(rufi_gowdis)
+# #Run PCoA without a constant added using the stats package
+# rufi_pcoa <- cmdscale(rufi_gowdis, k = 3, eig = T, add = F)
+# #Check eigenvalues
+# rufi_pcoa$eig
+# rufi_pcoa$GOF
+# 
+# #rufi_pcoa_eucldist <- vegdist(rufi_pcoa$points, method = "euclidean")
+# #Shepard <- Shepard_diy(rufi_gowdis, rufi_pcoa_eucldist)
+# #Calculate PC loadings using correlation analysis - misses 124 species, so not necessarily that representative
+# vec_tr <- envfit(fish_pcoa,  Fish_traits_select, perm = 1000, na.rm = T)
+# arrows <- as.data.frame(vec_tr$vectors$arrows)
+# factors <- as.data.frame(vec_tr$vectors$factors)
+# 
+# #Visualize scores
+# pcoa_scores <- as.data.frame(fish_pcoa$points)
+# pcoa_scores$spe <- rownames(pcoa_scores)
+# colnames(pcoa_scores) <- c("PC1", "PC2")
+# ggplot(pcoa_scores, aes(x = PC1, y = PC2, label = rownames(pcoa_scores))) + geom_label() +
+#   geom_segment(data = arrows, aes(x = rep(0, 13), y = rep(0, 13), xend = Dim1 , yend = Dim2, label = rownames(arrows))) + 
+#   geom_text(aes(x = Dim1, y = Dim2, label = rownames(arrows)), data = arrows, color = "red") +
+#   
+#   
+#   ggplot(arrows) + geom_segment(aes(x = rep(0, 13), y = rep(0, 13), xend = Dim1 , yend = Dim2))
+# 
+# ###########################################
+# #Extra: 
+# #rufidat_overlapplot <- ldply(seq(5,50,1), function(y) {
+# #  rufidat_dtgap[ID %in% as.character(rufidat_gapyear[rufidat_gapyear$gagecount_gap_0.1>y,'ID']),list(length(unique(ID)), minyr=y), .(Date)]
+# #})

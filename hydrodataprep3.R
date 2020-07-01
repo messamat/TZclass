@@ -17,9 +17,9 @@ library(waterData) #to import USGS data
 library(prospectr) #for sg derivative
 library(dplyr)
 library(compare)
-setwd("F:/Tanzania/Tanzania/results") #UPDATE
-datadir = file.path(getwd(),'rufiji_hydrodataraw') #UPDATE
-origdatadir = "F:/Tanzania/Tanzania/data" #UPDATE
+setwd("F:/Tanzania/Tanzania/results") #####UPDATE THIS TO MATCH YOUR PROJECT FOLDER #######
+datadir = file.path(getwd(),'rufiji_hydrodataraw') #####UPDATE THIS TO MATCH YOUR PROJECT FOLDER #######
+origdatadir = "F:/Tanzania/Tanzania/data" #####UPDATE THIS TO MATCH YOUR PROJECT FOLDER #######
 
 #Define output directory
 outdir=file.path(getwd(),'rufiji_hydrodatainspect')
@@ -102,7 +102,7 @@ colnames(JKdat) <- c('ID','Date','Flow')
 JKdat$SYM <- 'simulated'
 JKdat$Agency <- 'JaphetKashaigili'
 
-####TUN THE FOLLOWING COMMENTED-OUT BLOCK IN ORDER TO GET DIAGNOSTIC PLOTS USED IN DATA QA/QCing####
+####RUN THE FOLLOWING COMMENTED-OUT BLOCK IN ORDER TO GET DIAGNOSTIC PLOTS USED IN DATA QA/QCing####
 # for (gage in unique(rufidat_screenform$ID)) {
 #   print(gage)
 #   gname <- as.character(unique(rufidat[rufidat$Gage.ID==gage,'Station.Name']))

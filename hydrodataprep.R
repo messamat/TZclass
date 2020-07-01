@@ -15,7 +15,9 @@ library(openxlsx)
 library(reshape2)
 library(DescTools)
 library(stringr)
-rootdir= "F:/Tanzania/Tanzania" #UPDATE
+library(rprojroot)
+
+rootdir <- rprojroot::find_root(rprojroot::has_dir("src")) #####UPDATE THIS TO MATCH YOUR PROJECT FOLDER #######
 setwd(file.path(rootdir, "results")) 
 datadir = file.path(rootdir, "data")
 ########################################
@@ -25,7 +27,7 @@ datadir = file.path(rootdir, "data")
 setClass('myDate')
 setAs("character","myDate", function(from)  as.POSIXct(from, format= "%m/%d/%Y %H:%M")) #Create format to directly import data column in appropriate format
 ruahaflow <- read.csv(file.path(datadir,"sharepoint20180316/flow/2018-03-06 Corrected Ruaha Stage and Flow_data.csv"),
-                      colClasses = c('factor','factor','myDate','numeric','numeric','character','character'))
+                      colClasses = c('factor','factor','myDate','numeric','numeric','character','character')) 
 length(table(ruahaflow$Gage.ID))
 ruahaflow <- ruahaflow[,!names(ruahaflow) %in% c("X","X.1")]
 #str(ruahaflow)

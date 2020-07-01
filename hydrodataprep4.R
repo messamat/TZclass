@@ -22,8 +22,8 @@ library(foreign)
 library(forecast)
 library(imputeTS)
 
-setwd("F:/Tanzania/Tanzania/results") #UPDATE
-datadir = file.path(getwd(),'rufiji_hydrodatainspect') #UPDATE
+setwd("F:/Tanzania/Tanzania/results")  #####UPDATE THIS TO MATCH YOUR PROJECT FOLDER #######
+datadir = file.path(getwd(),'rufiji_hydrodatainspect')  #####UPDATE THIS TO MATCH YOUR PROJECT FOLDER #######
 origdatadir = "F:/Tanzania/Tanzania/data"
 outdir=file.path(getwd(),'rufiji_hydrodataimpute')
 if (dir.exists(outdir)) {
@@ -36,8 +36,6 @@ if (dir.exists(outdir)) {
 rufidat_clean <- read.csv(file.path(datadir,'rufidat_clean.csv'), colClasses=c('factor','Date','numeric','character','character'))
 rufidat_deleted <- read.csv(file.path(datadir,'rufidat_deleted.csv'), colClasses=c('character','Date','numeric','character','character'))
 gagesenv <- read.dbf(file.path(getwd(),'gages_netjoin.dbf'))
-
-
 
 ################################################
 #Infilling/Interpolate data
@@ -323,113 +321,3 @@ rawsgplot <-ggplot(gts, aes(x=Date, y=Flow+0.01)) +
 png(file.path(outdir,paste(gage,'raw_sg.png',sep="_")),width = 20, height=12,units='in',res=300)
 print(rawsgplot)
 dev.off()
-
-######################################## EXTRA ######################################################
-# ggplot(tscastsub, aes(x=Date, y=get(colnames(tscastsub)[sn])))+
-#   geom_point(data=try,aes(y=pred), color='red') + 
-#   geom_point(color='black') 
-########################## Try na.StructTS ########################
-# tscast=as.data.frame(rufidat_cast)
-# sn=2
-# maxgap=180
-# 
-# #Restrict analysis to min and max year of records
-# mindate <- tscast[min(which(!is.na(tscast[,sn]))),'Date']
-# maxdate <- tscast[max(which(!is.na(tscast[,sn]))),'Date']+37
-# tscastsub <- tscast[tscast$Date>mindate & tscast$Date<maxdate,]
-# tscastsub <- ts(tscastsub[,sn],frequency=365)
-# pred_try <- na.StructTS(tscastsub, maxgap=180) #Started at 5:25pm - ran for 24h for one station. Did not solve.
-# 
-
-
-############################################################
-# #Try imputeTS package Kalman filter
-# sn='1KA8A'
-# mindate <- rufidat_castsub[min(which(!is.na(rufidat_castsub[,sn]))),'Date']
-# x <- na.kalman(rufidat_castsub[rufidat_castsub$Date>mindate,sn], model = "auto.arima")
-# rufidat_castsub[rufidat_castsub$Date>mindate,'pred1KA8A'] <- x
-# ggplot(rufidat_castsub[rufidat_castsub$Date>mindate,], aes(x=Date, y=get(sn)))+
-#   geom_point(aes(y=pred1KA8A), color='red') +
-#   geom_point(color='black')+
-#   scale_x_date(limits=as.Date(c('1965-01-01','1975-01-01')))
-##########################################################
-#Try out zoo na.approx - neither linear nor spline method is better
-# tscastsubzoo <- zoo(tscastsub[,sn])
-# coredata(tscastsubzoo)
-# #pred_try <- data.frame(pred=na.approx(tscastsubzoo,x=index(tscastsubzoo), na.rm=F, rule=2,method='linear',maxgap=37))
-# pred_try <- data.frame(pred=na.spline(tscastsubzoo,x=index(tscastsubzoo), na.rm=F,method='fmm'))
-# pred_try$Date <- tscastsub[,'Date']
-# ggplot(tscastsub, aes(x=Date, y=get(colnames(tscastsub)[sn])))+
-#   geom_point(data=pred_try,aes(y=pred), color='red') +
-#   geom_point(color='black')
-#############################################################
-#Try auto.arima from forecast package and KalmanSmoother, inspired from  https://stats.stackexchange.com/questions/104565/how-to-use-auto-arima-to-impute-missing-values
-#Function to fill gaps for one stream gauge based on an ARIMAX model and Kalman smoother using time series characteristics from that gauge and the other 
-#gages as exogenous regressors.
-#tscast data frame where the first is called 'Date' and contains dates and all the other columns are time flow series
-#sn: column of the time series to be infilled
-#maxgap: maximum gap length to be imputed
-#Example values to test function:
-#1KB8B, 1KB24, 1KB14A, 1KB50B, 1KA31, 1KA21A still have missing data
-# tscast=rufidat_cast
-# sn=34
-# maxgap=180
-# CustomImpute <- function(tscast, sn, maxgap) {
-#   if (sn > 1) {
-#     name<- colnames(tscast)[sn]
-#     print(name)
-#     #Restrict analysis to min and max year of records
-#     mindate <- tscast[min(which(!is.na(tscast[,sn]))),'Date']-37
-#     maxdate <- tscast[max(which(!is.na(tscast[,sn]))),'Date']+37
-#     tscastsub <- tscast[tscast$Date>mindate & tscast$Date<maxdate,]
-#     #Compute size of gap a record belongs to
-#     tscastsub$prevdate <- tscastsub[na.lomf(tscastsub[,sn]),'Date']
-#     tscastsub$nextdate <- tscastsub[na.lomb(tscastsub[,sn]),'Date']
-#     tscastsub$prevgap <- as.numeric(tscastsub$Date-as.Date(tscastsub$prevdate))
-#     tscastsub$nextgap <- as.numeric(as.Date(tscastsub$nextdate)-tscastsub$Date)
-#     tscastsub$gap <- as.numeric(as.Date(tscastsub$nextdate)-as.Date(tscastsub$prevdate))
-#     tscastsub <- as.data.frame(tscastsub)
-#     #Only use data from stream gauges that have at least 50% of overlapping non-NA data with that streamgauge
-#     overlap <- adply(tscastsub[!is.na(tscastsub[,sn]),-c(1,sn,ncol(tscastsub)-c(0,1,2,3,4))],2,function(x) {
-#       length(which(!is.na(x)))/length(which(!is.na(tscastsub[,sn])))
-#     })
-#     covar <- which(colnames(tscastsub)%in%overlap[overlap$V1>=0.5,'X1'])
-#     #Fit an ARIMAX model
-#     pred <- tscastsub[,sn]
-#     fit <- auto.arima(tscastsub[,sn],xreg=tscastsub[,covar]) 
-#     #ARIMAX without forcing seasonality onto the model does not pan out, but ARIMA takes way too long to apply to all gauges
-#     #Keep very simple interpolation for now, and increase complexity later
-#     #fit <- auto.arima(ts(tscastsub[,sn],frequency=365),D=1, approximation=F)
-#     #xreg=ts(tscastsub[,covar], frequency=365)
-#     #summary(fit)
-#     id.na <- which((tscastsub$gap<=maxgap | tscastsub$prevgap<=maxgap/2 | tscastsub$nextgap<=maxgap/2) &
-#                      is.na(tscastsub[,sn]))
-#     #Kalman smoother
-#     kr <- KalmanSmooth(tscastsub[,sn], fit$model)
-#     for (i in id.na)
-#       pred[i] <- fit$model$Z %*% kr$smooth[i,]
-#     #Output observed and predicted predicted data
-#     tscastsub[id.na, sn] <- pred[id.na]
-#     tscastsub[tscastsub[,sn]<0 & !is.na(tscastsub[,sn]),sn] <- 0
-#     return(tscastsub[,c(1,sn)])
-#   } else {
-#     warning('sn must be >1 as 1st column must be "Date"')
-#   }
-# }
-# 
-# #Fill in every gauge
-# impute_preds <- data.frame(Date=rufidat_cast[,"Date"])
-# for (i in 2:(ncol(rufidat_cast))) {
-#   try({
-#     impute_preds<-merge(impute_preds, CustomImpute(rufidat_cast,i,maxgap=365), by='Date', all.x=T)
-#   })
-# }
-# #Append the two gauges for which there was not enough info 1KA4A and 1KA33B
-# impute_preds <- cbind(impute_preds,rufidat_cast[,which(!(colnames(rufidat_cast) %in% colnames(impute_preds)))])
-
-###########################Try tbats: https://robjhyndman.com/publications/complex-seasonality/
-#Gives error
-# try <- tbats(ts1KA41)
-# precip1KA41sub[1:7300, 'Flowinterp'] <- try
-# ggplot(precip1KA41sub, aes(x=Date, y=Flowinterp)) + geom_point(color='red') +
-#   geom_point(aes(y=Flow), color='black')
