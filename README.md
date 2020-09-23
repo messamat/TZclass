@@ -8,10 +8,11 @@ These scripts are annotated but could be challenging to follow. Please contact t
 Numbers cited in accompanying report and peer-reviewed publication can all be found in the scripts.
 
 For the purpose of reproducing the full workflow used in this analysis, run the scripts in the following order:
+From https://github.com/messamat/TZclass_GIS:
 1. Python_GIS/data_prep_TZ.py
 2. Python_GIS/Rufiji_gages_envdata.py
 
-Followed by, for the inductive classification: 
+Followed by the following scripts from the present directory, for the inductive classification: 
 3. R/hydrodataprep.R
 4. R/hydrodataprep2.R (optional)	
 5. R/hydrodataprep3.R		
