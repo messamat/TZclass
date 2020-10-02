@@ -313,7 +313,8 @@ hclus.scree <- function(x,ylabel,...){
 #main=paste('Scree Plot of Hierarchical Clustering ',
 #           '(',x$dist.method,', ',x$method,')',sep='')
 
-cluster_diagnostic <- function(clusterres, clusname, gowdis, ylabel="Gower's distance", format='pdf') {
+cluster_diagnostic <- function(clusterres, clusname, gowdis, 
+                               ylabel="Gower's distance", format='pdf') {
   #hclus.table(clusterres)
   print(paste0('Agglomerative coefficient: ', coef.hclust(clusterres))) #Compute agglomerative coefficient
   print(paste0('Cophenetic correlation coefficient: ',cor(gowdis, cophenetic(clusterres)))) #Compute cophenetic coefficient
@@ -342,9 +343,18 @@ cluster_diagnostic <- function(clusterres, clusname, gowdis, ylabel="Gower's dis
 }
 
 #Make table of gauge classes and good looking dendogram
-prettydend <- function(gaugecla, dir, imgname, colorder=NULL, colors=classcol, kclass=7) {
+prettydend <- function(gaugecla, dir, imgname, colorder=NULL, colors=classcol,
+                       kclass=7, classnames = NULL) {
   classr <-cutree(gaugecla, k=kclass, order_clusters_as_data = FALSE)
   classr_df <- data.frame(ID=names(classr), gclass=classr) 
+  
+  if (!is.null(classnames)) {
+    classr_df <- merge(classr_df, classnames, by='gclass')
+    grouplabels <- classnames$classnames
+  } else {
+    grouplabels <- TRUE
+  }
+
   outdirclass <- file.path(outdir,dir)
   if (dir.exists(outdirclass )) {
     print('Directory already exists')
@@ -352,26 +362,33 @@ prettydend <- function(gaugecla, dir, imgname, colorder=NULL, colors=classcol, k
     print(paste('Create new directory:',outdirclass))
     dir.create(outdirclass )
   }
-  write.csv(classr_df, file.path(outdirclass,paste0(kclass,'classtab.csv')), row.names=F)
+  fwrite(classr_dt, file.path(outdirclass,paste0(kclass,'classtab.csv')), row.names=F)
   
   gaugecla_ward_name <- gaugecla
-  gaugecla_ward_name$labels <- with(gagesenvrec[gagesenvrec$RGS_No %in% gaugecla_ward_name$labels,], 
-                                    paste(RGS_No,"-",RGS_Loc," R. at ", RGS_Name,sep=""))
-  dendname <- as.dendrogram(gaugecla_ward_name)
+  gaugecla_ward_name$labels <- gagesenvrec[gagesenvrec$RGS_No %in% 
+                                             gaugecla_ward_name$labels, 'RGS_No']
+  #,paste(RGS_No,"-",RGS_Loc," R. at ", RGS_Name,sep=""))
   
+  dendname <- as.dendrogram(gaugecla_ward_name)
+
   if (is.null(colorder)) colorder = 1:kclass
-  png(file.path(outdirclass,imgname),width = 8, height=8,units='in',res=600)
-  par(mar=c(2.5,1.5,0,20.2)) #bottom left top right
-  dendname %>% set("branches_lwd", 2.5) %>% 
-    color_branches(k=kclass, col=colors[colorder], groupLabels=T) %>% 
+  png(file.path(outdirclass,imgname),width = 10, height=8,units='in',res=600)
+  par(mar=c(2.5, 2, 0, 2)) #bottom left top right
+  dendname %>% set("branches_lwd", 3) %>% 
+    color_branches(k=kclass, col=colors[colorder], groupLabels=grouplabels) %>% 
     #color_branches(clusters=as.numeric(temp_col), col=levels(temp_col), groupLabels=as.character(as.numeric(temp_col))) %>% 
     color_labels(k=kclass, col=colors[colorder]) %>%
     plot(horiz=TRUE,xlab="Gower's distance", ylab="",mgp=c(1.5,0.5,0))
-    title(ylab="Station ID - River gauge name (format: River at Location)", line=0)
+    title(ylab="Station ID - River gauge name", line=0, cex=1)
   dev.off()
   
   return(list(classr_df, dendname))
 }
+
+classsub3_ward_7df <-prettydend(gaugecla = gaugecla_wardsub3, 
+                                dir='classo15y_ward_rawsub3',
+                                imgname='7class_dendrogram.png', kclass=7,
+                                classnames=classnames)
 
 #Define class colors
 classcol<- c("#176c93","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#7a5614","#6baed6","#00441b") #9 classes with darker color (base blue-green from Colorbrewer2 not distinguishable on printed report and ppt)
@@ -396,7 +413,8 @@ cluster_diagnostic(gaugecla_UPGMA, "o15y UPGMA", gaugegow_o15y)
 #pvrect(clus.stab, alpha=0.90)
 
 #Make table of gauge classes and good looking dendogram
-classr_ward_7df <- prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='7class_dendrogram.png', kclass=7)
+classr_ward_7df <- prettydend(gaugecla_ward, dir='classo15y_ward_raw',
+                              imgname='7class_dendrogram.png', kclass=7)
 classr_ward_6df <- prettydend(gaugecla_ward, dir='classo15y_ward_raw',imgname='6class_dendrogram.png', kclass=6)
 classr_ward2_7df <- prettydend(gaugecla_ward2, dir='classo15y_ward2_raw',imgname='7class_dendrogram.png', kclass=7)
 
@@ -438,10 +456,21 @@ cluster_diagnostic(gaugecla_UPGMAsub3, "o15y UPGMA sub3", gaugegow_o15ysub3)
 # pvrect(clus.stab, alpha=0.90)
 
 #Output and make dendogram
-classsub3_ward_7df <-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='7class_dendrogram.png', kclass=7)
+classsub3_ward_7df <-prettydend(gaugecla = gaugecla_wardsub3, 
+                                dir='classo15y_ward_rawsub3',
+                                imgname='7class_dendrogram.png', kclass=7,
+                                classnames=classnames)
 classsub3_ward_6df <-prettydend(gaugecla_wardsub3, dir='classo15y_ward_rawsub3',imgname='6class_dendrogram.png', kclass=6)
 classsub3_ward2_7df <-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='7class_dendrogram.png', kclass=7)
 classsub3_ward2_6df <-prettydend(gaugecla_ward2sub3, dir='classo15y_ward2_rawsub3',imgname='6class_dendrogram.png', kclass=6)
+
+######################DEFINE CLASS NAMES#########################
+classnames= data.table(gclass = 1:7, 
+                       classnames = factor(
+                         c('StaPer', 'FshInt', 'VarInt', 'PrLPer', 
+                           'PrMPer', 'UprPer', 'VarPer'),
+                         levels= c('StaPer', 'FshInt', 'VarInt', 'PrLPer', 
+                                   'PrMPer', 'UprPer', 'VarPer')))
 
 ######################################### CLASSIFICATION BASED ON ENTIRE PERIOD > 5 YEARS OF DATA ################################
 gaugegow_o5ysub3 <- HITdist(HITo5ysub3, logmetrics=TRUE) 
@@ -510,9 +539,16 @@ comembership_table(classr_pre83, classr_post91)
 
 
 ######################################################## Class hydrograph plots ################
-hydrographplots <- function(hydrodat, classtab, dir, kclass) {
+hydrographplots <- function(hydrodat, classtab, dir, kclass, classnames=NULL) {
   outdirclass <- file.path(outdir,dir)
   hydrodat_class_join <- merge(hydrodat, classtab, by="ID")
+  
+  if (!is.null(classnames)) {
+    hydrodat_class_join <- merge(hydrodat_class_join, classnames, by='gclass') 
+  } else {
+    hydrodat_class_join[, classnames := gclass]
+  }
+  
   write.csv(hydrodat_class_join, file.path(outdirclass,'rufidat_class_join.csv'), row.names=F)
   setDT(hydrodat_class_join)[,yrmean:=mean(Flow),.(ID,hyear)] #Compute average daily flow for each station and year
   #Compute statistics on long-term daily flow (average, min, max, Q10, Q25, Q75, Q90) across all stations and years for each class
@@ -521,10 +557,10 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
                                                      classQ10=quantile(Flow/yrmean, .90,na.rm=T),classmax=max(Flow/yrmean,na.rm=T),
                                                      classmin=min(Flow/yrmean,na.rm=T),classsd=sd(Flow/yrmean,na.rm=T), 
                                                      cal_hdoy=format(as.Date(hdoy, origin='2015-10-01'), "%Y-%m-%d")),
-                                               .(gclass,hdoy)] 
+                                               .(gclass, classnames,hdoy)] 
   
   #Superimposed non-standardized average yearly hydrograph for each class
-  classhydro_allfull <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmeanfull, color=factor(gclass))) + 
+  classhydro_allfull <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmeanfull, color=factor(classnames))) + 
     geom_line(size=1, alpha=0.8) + 
     scale_color_manual(name='Hydrologic class',values=classcol[1:kclass]) +
     scale_y_continuous(name=expression('Daily mean discharge'~(m^{3}%.%s^{-1})),expand=c(0,0),limits=c(0,NA)) + 
@@ -535,7 +571,7 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
     labs(subtitle = "(a)")
   
   #Superimposed standardized average yearly hydrograph for each class
-  classhydro_all <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmean, color=factor(gclass))) + 
+  classhydro_all <- ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy), y=classmean, color=factor(classnames))) + 
     geom_line(size=1, alpha=0.8) + 
     scale_color_manual(name='Hydrologic class',values=classcol[1:kclass]) +
     scale_fill_manual(name='Hydrologic class',values=classcol[1:kclass]) +
@@ -548,11 +584,11 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
   #Facetted standardized average yearly hydrograph for each class + Q90-Q10 ribbon
   classhydro_facet <-ggplot(as.data.frame(classflowstats), aes(x=as.Date(cal_hdoy))) + 
     #geom_ribbon(aes(ymin=ifelse(classmean-2*classsd>=0,classmean-2*classsd,0), ymax=classmean+2*classsd,
-    #                fill=factor(gclass)),alpha=0.3) +
+    #                fill=factor(classnames)),alpha=0.3) +
     geom_ribbon(aes(ymin=classQ90, ymax=classQ10,
-                    fill=factor(gclass)),alpha=0.3) +
-    geom_line(aes(y=classmean, color=factor(gclass)),size=1.2) + 
-    facet_grid(gclass~.,scale='free_y') +
+                    fill=factor(classnames)),alpha=0.3) +
+    geom_line(aes(y=classmean, color=factor(classnames)),size=1.2) + 
+    facet_grid(classnames~.,scale='free_y') +
     scale_color_manual(name='Hydrologic class',values=classcol[1:kclass]) +
     scale_fill_manual(name='Hydrologic class',values=classcol[1:kclass]) +
     scale_y_continuous(name='Standardized daily mean discharge',expand=c(0,0),limits=c(0,NA)) + 
@@ -572,20 +608,24 @@ hydrographplots <- function(hydrodat, classtab, dir, kclass) {
   dev.off()
 }
 
-hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_7df[1], dir='classo15y_ward_rawsub3', kclass=7)
-hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_6df[1], dir='classo15y_ward_rawsub3', kclass=6)
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_7df[1], 
+                dir='classo15y_ward_rawsub3', kclass=7, classnames = classnames)
+hydrographplots(hydrodat = rufidat_select_o15y, classtab=classsub3_ward_6df[1], 
+                dir='classo15y_ward_rawsub3', kclass=6)
 
 ######################################################## Dominant metric analysis ##############
-classHIT <- merge(HITo15y, classsub3_ward_7df[1], by="ID")
+classHIT <- merge(HITo15y, classsub3_ward_7df[1], by="ID") %>%
+  merge(., classnames, by='gclass')
+  
 
-classHIT_KW <- dcast(setDT(classHIT), ID+gclass~indice)
+classHIT_KW <- dcast(setDT(classHIT), ID+classnames~indice)
 #To do:
 #- Kruskal Wallis statistics for each hydrologic metrics to assess importance on classification
 #- NMDS (Ward’s distance) of gauges, superimposing the dominant metrics
 #- Compute classificatin strength
 metricKW <- data.frame(Metric=NA, KWchi=NA, KWp=NA)
 for (ind in colnames(classHIT_KW[,3:(ncol(classHIT_KW))])) {
-  f <- paste0(ind," ~ gclass")
+  f <- paste0(ind," ~ classnames")
   KW <-do.call("kruskal.test", list(as.formula(f), data=classHIT_KW))
   metricKW <- rbind(metricKW, data.frame(Metric=ind, KWchi=as.numeric(KW$statistic), KWp=as.numeric(KW$p.value)))
 }
@@ -634,26 +674,27 @@ tableformat <- function(df,tabname) {
     save_kable(tabname, self_contained=T)
 }
 
-
-
-tableformat(HITo15y_cast, tabname='HITdf_cast.doc')
+tableformat(HITo15y_cast, tabname=paste0('HITdf_cast',
+                                         format(Sys.Date(), '%Y%m%d'), '.doc'))
 
 #########Make table reporting mean (SD) for each metric for all classes (appendix)
 classtableformat <- function(df, KWtab, tabname) {
-  classHIT_stats<- setDT(df)[,`:=`(classmean=mean(value, na.rm=T),classsd=sd(value,na.rm=T)), .(indice, gclass)] #Get mean and SD of hydrologic metric for each class
-  classHIT_stats <- classHIT_stats[!duplicated(classHIT_stats[,c('indice','gclass')]),]
-  classHIT_statsmean <- as.data.frame(dcast(classHIT_stats, gclass~indice, value.var='classmean'))
-  classHIT_statssd <- as.data.frame(dcast(classHIT_stats, gclass~indice, value.var='classsd'))
+  classHIT_stats<- setDT(df)[,`:=`(classmean=mean(value, na.rm=T),
+                                   classsd=sd(value,na.rm=T)),
+                             .(indice, classnames)] #Get mean and SD of hydrologic metric for each class
+  classHIT_stats <- classHIT_stats[!duplicated(classHIT_stats[,c('indice','classnames')]),]
+  classHIT_statsmean <- as.data.frame(dcast(classHIT_stats, classnames~indice, value.var='classmean'))
+  classHIT_statssd <- as.data.frame(dcast(classHIT_stats, classnames~indice, value.var='classsd'))
   #Format digits for mean and sd
   classHIT_stats_meanform <- melt(setDT(digitform(classHIT_statsmean,
-                                                  cols=2:(ncol(classHIT_statsmean)), extradigit=1)),id.vars='gclass',variable.name='Metric', value.name='classmean')
+                                                  cols=2:(ncol(classHIT_statsmean)), extradigit=1)),id.vars='classnames',variable.name='Metric', value.name='classmean')
   classHIT_stats_sdform <- melt(setDT(digitform(classHIT_statssd,
-                                                cols=2:(ncol(classHIT_statssd)), extradigit=1)),id.vars='gclass',variable.name='Metric', value.name='classsd')
-  classHIT_format <- merge(classHIT_stats_meanform, classHIT_stats_sdform, by=c('gclass','Metric'))
+                                                cols=2:(ncol(classHIT_statssd)), extradigit=1)),id.vars='classnames',variable.name='Metric', value.name='classsd')
+  classHIT_format <- merge(classHIT_stats_meanform, classHIT_stats_sdform, by=c('classnames','Metric'))
   classHIT_format$tabcol <- with(classHIT_format, paste0(classmean,' (',classsd,')'))
   
   classHIT_format[is.na(classHIT_format$classsd),'tabcol']  <- '–'
-  table <- as.data.frame(dcast(classHIT_format, Metric~gclass, value.var='tabcol'))
+  table <- as.data.frame(dcast(classHIT_format, Metric~classnames, value.var='tabcol'))
   metrics <-data.frame(type=substr(table$Metric,1,2), num=as.numeric(substr(table$Metric,3,5)))
   table <- table[with(metrics, order(type, num)),] #Order rows by metrics number
   table <- merge(table, metricKW[,c('Metric','Significance')], by='Metric')
@@ -670,7 +711,9 @@ classtableformat <- function(df, KWtab, tabname) {
     column_spec(8,color=classcol[7]) %>%
     save_kable(tabname, self_contained=T)
 }
-classtableformat(classHIT, KWtab=metricKW, tabname='HITgclass_cast_20180704.doc')
+classtableformat(classHIT, KWtab=metricKW, 
+                 tabname=paste0('HITclassnames_cast_',
+                                format(Sys.Date(), '%Y%m%d'), '.doc'))
 
 ######################################################## Boxplots#############################################
 #ANOSIM of classes
@@ -715,7 +758,8 @@ HIT_labels<-setNames(str_wrap(paste(HITselplot,HITselplotname,sep=": "),
                      HITselplot) #Set metrics labels
 
 #Boxplot of metrics for each class
-classHITplot <-ggplot(classHITselbox, aes(x=as.factor(gclass), y=value+0.01, color=as.factor(gclass))) + 
+classHITplot <-ggplot(classHITselbox, 
+                      aes(x=classnames, y=value+0.01, color=classnames)) + 
   geom_boxplot(outlier.shape = NA) +
   scale_y_continuous(name='Metric value',expand=c(0.05,0)) +
   scale_x_discrete(name='Hydrologic class')+
@@ -725,13 +769,15 @@ classHITplot <-ggplot(classHITselbox, aes(x=as.factor(gclass), y=value+0.01, col
              labeller=as_labeller(HIT_labels)) +
   theme(axis.title = element_text(size=12),
         axis.text.y = element_text(size=11, angle=90),
+        axis.text.x = element_text(angle=45, vjust=0.75),
         strip.text = element_text(size=12),
         strip.background = element_rect(color='white', fill='#f0f0f0'),
         legend.position='none')
 
 dir='classo15y_ward_rawsub3'
 outdirclass <- file.path(outdir,dir)
-png(file.path(outdirclass,'7class_boxplot.png'),
+png(file.path(outdirclass,
+              paste0('7class_boxplot', format(Sys.Date(), '%Y%m%d'), '.png')),
     width = 8.5, height=11.5,units='in',res=600)
 print(classHITplot)
 dev.off()

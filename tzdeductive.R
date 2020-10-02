@@ -38,11 +38,12 @@
 # library(stargazer)
 
 library(stringr)
+library(data.table)
 library(fastcluster)
 library(cluster)
 library(ggplot2)
 
-rootdir="F:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
+rootdir="D:/Tanzania/Tanzania" #####UPDATE THIS TO MATCH YOUR ROOT PROJECT FOLDER #######
 
 source(file.path(rootdir,"bin/outside_src/Biostats.R"))
 #source(file.path(rootdir,"bin/outside_src/mjcgraphics.R"))
@@ -58,7 +59,11 @@ if (dir.exists(outdir)) {
 }
 
 #Import data
-tzenv <- read.csv('streamnet118_final.csv')
+tzenv <- fread('streamnet118_final.csv') %>%
+  as.data.frame
+
+gagesenv <- read.csv(file.path(getwd(),'gages_netjoinclean.csv')) #Import gauges' environmental data
+
 
 ##################### Format data ###################################
 tzenv[,'WsVegPer'] <-  with(tzenv, WsTreePer+WsShruPer+WsGrasPer) #Sum % trees, scrubs, grassland into a vegetation variable
@@ -103,19 +108,31 @@ gagesenv_format <- merge(gagesenv_format,  tzenvsub_std, by='GridID')
 pred_envar <- c('ReaElvAvg','WsArea','WsElvAvg','WsSloAvg','WsWatOcc','WsWatSea','WsBio10Av','WsBio11Av','WsBio12Av',
                 'WsBio15Av','WsBio16Av','WsBio17Av','WsPETAvg','WsDRocAvg','WsPermAvg','WsPoroAvg','WsVegPer','WsAgriPer', 'WsUrbPer','WsLakInd') #Add lake index
 #Get labels for variable importance plot
-pred_envarname <- c('Reach elevation', "Catchment area","Catchment elevation","Catchment slope", 
-                    'Water occurrence', "Water seasonality"," Temp. warmest quarter", 
-                    "Temp. coldest quarter", "Annual precipitation", " Precip. seasonality"," Precip. wettest quarter",
-                    "Precip. driest quarter", " Annual PET"," Depth to bedrock"," Subsoil permeability", 
-                    "Subsoil porosity", "Vegetation cover", "Agricultural cover", "Built up areas","Lake index")
+pred_envarname <- c('Reach elevation (m)', "Catchment area (km^2)",
+                    "Catchment elevation (m)","Catchment slope (°)", 
+                    'Water occurrence', "Water seasonality"," Temp. warmest quarter (°C)", 
+                    "Temp. coldest quarter (°C)", "Annual precipitation (mm)",
+                    "Precip. seasonality"," Precip. wettest quarter (mm)",
+                    "Precip. driest quarter (mm)", "Annual PET (mm)",
+                    "Depth to bedrock (cm)","Subsoil permeability", 
+                    "Subsoil porosity", "Vegetation cover (%)", 
+                    "Agricultural cover (%)", "Built up areas (%)","Lake index")
 pred_envlabel <- data.frame(var=pred_envar,label=pred_envarname) #Prepare labels
 tzenvsub_std[,pred_envar] <- replace.missing(tzenvsub_std[,pred_envar], method='mean')
 summary(tzenvsub_std[,pred_envar])
 rm("tzenv","tzenvsub")
 gc()
 ################## Classify #########################################
-tzward <- fastcluster::hclust.vector(tzenvsub_std[,pred_envar], method='ward', metric="euclidean")
-save.image(file = paste0("tz_deductive", Sys.Date(),".RData"))
+flist <- list.files()
+deducimg <- grep('tz_deductive.*[.]RData', flist)
+if (deducimg) {
+  print('A saved classification already exists, loading...')
+  load(flist[max(deducimg)])
+} else {
+  print('There is no existing image of the deductive classification, computing...')
+  # tzward <- fastcluster::hclust.vector(tzenvsub_std[,pred_envar], method='ward', metric="euclidean")
+  # save.image(file = paste0("tz_deductive", Sys.Date(),".RData"))
+}
 
 hclus.scree <- function(x,ylabel,...){
   old.par<-par(no.readonly=TRUE)
@@ -126,8 +143,6 @@ hclus.scree <- function(x,ylabel,...){
        main=NULL,ylab=ylabel,xlab='Number of clusters',...)
   par(old.par)
 }
-
-
 
 cluster_diagnostic <- function(clusterres, ylabel,clusname,dendo) {
   #hclus.table(clusterres)
@@ -141,7 +156,7 @@ cluster_diagnostic <- function(clusterres, ylabel,clusname,dendo) {
 cluster_diagnostic(tzward, ylabel="Average within-cluster dissimilarity (Euclidean distance)",clusname="Ward's D_20180706", dendo=T)
 
 kclass=11
-classr <-cutree(tzward, k=kclass, order_clusters_as_data = T)
+classr <-dendextend::cutree(tzward, k=kclass, order_clusters_as_data = T)
 classr_df <- data.frame(GridID=tzenvsub_std$GridID, gclass=classr) 
 if (dir.exists(outdir)) {
   print('Directory already exists')
@@ -172,9 +187,14 @@ dev.off()
 
 #################### Make table ###############################
 #RE-ORDER CLASSES BASED ON TREE
+classes <- c('Urban', 'LkInf', 'LkInf', 'CoaWt', 'LWtSe',
+             'MWtSe', 'Monta', 'AgrPl', 'DrySt', 'DrySe',
+             'VDryS')
 reord_k11 <- data.frame(k_orig=c(3,4,5,9,10,11,2,6,1,7,8), 
-                        #k_new=c(1,2,2,4,5,6,7,8,9,10,11), 
-                        k_label=c('A','B','B','C','D','E','F','G','H','I','J'))
+                        #k_order=c(1,2,2,4,5,6,7,8,9,10,11), 
+                        k_label = factor(classes, levels=unique(classes))
+                        )
+#k_label=c('A','B','B','C','D','E','F','G','H','I','J'))
 
 # classcol=c('#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99',
 #            '#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a',
@@ -233,25 +253,29 @@ classtableformat(classenv_melt,tabname=file.path(outdir,'deductive_envgclass_cas
 
 env_labels<-setNames(pred_envarname,pred_envar) #Set metrics labels
 
-setDT(classenv_melt)[,length(GridID),.(k_label)]
+setDT(classenv_melt) 
+classenv_melt[,.N,.(k_label)]
 
 #Boxplot of metrics for each class
 #Remove reach elevation, catchment area, water occurrence and seasonality, temp. coldest quarter, 
 excludvar <- c('ReaElvAvg','WsArea','WsWatOcc','WsWatSea','WsBio11Av','gclass')
-tz_classenvplot <-ggplot(classenv_melt[!(classenv_melt$variable %in% excludvar) & !is.na(classenv_melt$value),],
-                      aes(x=as.factor(k_label), y=value, color=as.factor(k_label))) + 
+tz_classenvplot <-ggplot(classenv_melt[!(variable %in% excludvar) & 
+                                         !is.na(Value),],
+                      aes(x=k_label, y=Value, color=k_label)) +
   geom_boxplot(outlier.shape = NA) +
-  facet_wrap(~as.factor(variable), scales='free',ncol=5,labeller=as_labeller(env_labels))+
+  facet_wrap(~as.factor(variable), scales='free',ncol=4,labeller=as_labeller(env_labels))+
   scale_y_continuous(name='Metric value',expand=c(0.05,0))+
   scale_x_discrete(name='River class')+
   scale_colour_manual(values=classcol) + 
   theme_classic() +
   theme(axis.title = element_text(size=14),
         axis.text.y = element_text(size=11, angle=90),
+        axis.text.x = element_text(angle=90, vjust=0.1,  hjust=1.1, color=classcol),
         strip.text = element_text(size=10),
+        strip.background = element_rect(color=NA, fill='#f0f0f0'),
         legend.position='none') 
 #dir='classo15y_ward_rawsub3'
 #outdirclass <- file.path(outdir,dir)
-png(file.path(outdir,'11class_boxplot_20180704.png'),width = 9.5, height=8.5,units='in',res=300)
+png(file.path(outdir,'11class_boxplot_20201002.png'),width = 8.5, height=10,units='in',res=600)
 print(tz_classenvplot)
 dev.off()
